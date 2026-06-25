@@ -35,8 +35,14 @@ temp/
 Thumbs.db
 
 # Do not publish raw operational/export workbooks or Power BI upload outputs
+/README.md
 /data/
+/dax/
+/docs/
 docs/Project_Locations.md
+/powerquery/
+/theme/
+/webapp/
 *.xlsx
 *.xls
 *.xlsm
