@@ -36,6 +36,7 @@ const state = {
   reference: new Map(),
   referenceRows: [],
   station: "ORD",
+  serviceDate: "",
   csc: "All",
   equipment: "fullCarts",
   cycleCounts: { ...DEFAULT_CYCLE_COUNTS },
@@ -66,6 +67,7 @@ const els = {
   scheduleFile: document.querySelector("#scheduleFile"),
   resetButton: document.querySelector("#resetButton"),
   stationFilter: document.querySelector("#stationFilter"),
+  dateFilter: document.querySelector("#dateFilter"),
   cscFilter: document.querySelector("#cscFilter"),
   equipmentFilter: document.querySelector("#equipmentFilter"),
   outboundFlights: document.querySelector("#outboundFlights"),
@@ -128,6 +130,7 @@ async function boot() {
   applyViewMode();
   populateEquipmentFilter();
   populateStationFilter();
+  populateDateFilter();
   populateCscFilter();
   populateCycleInputs();
   render();
@@ -154,14 +157,22 @@ function bindEvents() {
   els.scheduleFile.addEventListener("change", async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-    const text = await file.text();
-    state.schedule = normalizeSchedule(parseCsv(text));
-    state.sourceName = file.name;
-    state.station = "All";
-    state.csc = "All";
-    populateStationFilter();
-    populateCscFilter();
-    render();
+    try {
+      state.schedule = normalizeSchedule(await parseScheduleFile(file));
+      state.sourceName = file.name;
+      state.station = "All";
+      state.csc = "All";
+      state.serviceDate = "";
+      populateStationFilter();
+      populateDateFilter();
+      populateCscFilter();
+      render();
+    } catch (error) {
+      console.error(error);
+      els.sourceLabel.textContent = error.message || "Unable to load that schedule file.";
+    } finally {
+      event.target.value = "";
+    }
   });
 
   els.resetButton.addEventListener("click", async () => {
@@ -169,12 +180,14 @@ function bindEvents() {
     state.schedule = normalizeSchedule(parseCsv(text));
     state.sourceName = DEFAULT_SOURCE_NAME;
     state.station = "ORD";
+    state.serviceDate = "";
     state.csc = "All";
     state.equipment = "fullCarts";
     state.cycleCounts = { ...DEFAULT_CYCLE_COUNTS };
     saveCycleCounts();
     populateCycleInputs();
     populateStationFilter();
+    populateDateFilter();
     populateCscFilter();
     populateEquipmentFilter();
     render();
@@ -182,11 +195,17 @@ function bindEvents() {
 
   els.stationFilter.addEventListener("change", () => {
     state.station = els.stationFilter.value;
+    populateDateFilter();
     populateCscFilter();
     if (![...els.cscFilter.options].some((option) => option.value === state.csc)) {
       state.csc = "All";
     }
     syncStationFilters();
+    render();
+  });
+
+  els.dateFilter.addEventListener("change", () => {
+    state.serviceDate = els.dateFilter.value;
     render();
   });
 
@@ -321,6 +340,29 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     drawCurve(calculate().hourlyRows, els.curveCanvas);
     drawCurve(calculate({ scenario: state.irrop }).hourlyRows, els.irropCanvas);
+  });
+}
+
+async function parseScheduleFile(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "csv") return parseCsv(await file.text());
+  if (!["xlsx", "xls"].includes(extension)) {
+    throw new Error("Use a CSV, XLSX, or XLS schedule file.");
+  }
+  if (!window.XLSX) {
+    throw new Error("Excel support could not load. Check your internet connection and try again.");
+  }
+
+  const workbook = window.XLSX.read(await file.arrayBuffer(), {
+    type: "array",
+    cellDates: true,
+  });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) return [];
+  const sheet = workbook.Sheets[sheetName];
+  return window.XLSX.utils.sheet_to_json(sheet, {
+    defval: "",
+    raw: false,
   });
 }
 
@@ -476,30 +518,57 @@ function normalizeAircraft(value) {
 }
 
 function parseDateTime(value, dateValue, timeValue) {
-  if (value) {
-    const parsed = new Date(String(value).replace(" ", "T"));
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
+  const direct = coerceDate(value);
+  if (direct) return direct;
 
-  if (dateValue && timeValue) {
-    const timeText = String(timeValue).trim();
-    const parsed = new Date(`${dateValue}T${timeText.length <= 5 ? `${timeText}:00` : timeText}`);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
+  if (!dateValue || !timeValue) return null;
+  const combined = coerceDate(`${dateValue} ${timeValue}`);
+  if (combined) return combined;
 
-  return null;
+  const dateOnly = coerceDate(dateValue);
+  if (!dateOnly) return null;
+  const timeParts = parseTimeParts(timeValue);
+  if (!timeParts) return null;
+  dateOnly.setHours(timeParts.hours, timeParts.minutes, 0, 0);
+  return dateOnly;
+}
+
+function coerceDate(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === "number" && value > 1) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    return new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
+  }
+  const text = String(value).trim();
+  if (!text) return null;
+  const parsed = new Date(text.replace(/^(\d{4}-\d{2}-\d{2}) /, "$1T"));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseTimeParts(value) {
+  const text = String(value || "").trim().toUpperCase();
+  const match = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  if (match[3] === "PM" && hours < 12) hours += 12;
+  if (match[3] === "AM" && hours === 12) hours = 0;
+  if (hours > 23 || minutes > 59) return null;
+  return { hours, minutes };
 }
 
 function calculate(options = {}) {
   const scenario = options.scenario || null;
-  const rows = state.schedule.filter((row) => {
+  const baseRows = state.schedule.filter((row) => {
     const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
     const cscMatch = state.csc === "All" || row.csc === state.csc;
     return stationMatch && cscMatch;
   });
+  const operationalWindow = getOperationalWindow(baseRows);
+  const rows = baseRows.filter((row) => isFlightInOperationalWindow(row, operationalWindow));
   const missing = new Map();
   const events = new Map();
-  const operationalWindow = getOperationalWindow(rows);
   let inbound = 0;
   let excluded = 0;
   let outbound = 0;
@@ -591,11 +660,17 @@ function calculate(options = {}) {
 }
 
 function filteredSchedule() {
-  return state.schedule.filter((row) => {
-    const stationMatch = state.station === "All" || row.origin === state.station;
+  const stationRows = state.schedule.filter((row) => {
+    const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
     const cscMatch = state.csc === "All" || row.csc === state.csc;
     return stationMatch && cscMatch;
   });
+  const operationalWindow = getOperationalWindow(stationRows);
+  return stationRows.filter((row) => isFlightInOperationalWindow(row, operationalWindow));
+}
+
+function isFlightInOperationalWindow(row, window) {
+  return [row.departure, row.arrival, row.stationTime].some((date) => date && isInOperationalWindow(date, window));
 }
 
 function selectedCycleCount() {
@@ -648,6 +723,14 @@ function addHours(date, hours) {
 }
 
 function getOperationalWindow(rows) {
+  if (state.serviceDate) {
+    const [year, month, day] = state.serviceDate.split("-").map(Number);
+    if (year && month && day) {
+      const start = new Date(year, month - 1, day, 2, 0, 0, 0);
+      return { start, end: addHours(start, 24) };
+    }
+  }
+
   const outboundDates = rows
     .filter((row) => state.station === "All" || row.origin === state.station)
     .map((row) => row.departure || row.stationTime)
@@ -669,6 +752,17 @@ function isInOperationalWindow(date, window) {
 
 function dateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function operationalDateKey(date) {
+  if (!date) return "";
+  return dateKey(addHours(date, -2));
+}
+
+function formatDateLabel(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(year, month - 1, day));
 }
 
 function isTimeInWindow(date, startHour, endHour) {
@@ -702,8 +796,9 @@ function renderPlannerOnly() {
 }
 
 function renderSourceLabel() {
-  const stationNote = state.station === "ORD" ? " • ORD demand and inbound supply" : "";
-  els.sourceLabel.textContent = `${state.sourceName}${stationNote} • ${state.reference.size} aircraft mappings loaded`;
+  const hubNote = state.station === "All" ? "All hubs" : `${state.station} hub`;
+  const dateNote = state.serviceDate ? formatDateLabel(state.serviceDate) : "Auto date";
+  els.sourceLabel.textContent = `${state.sourceName} • ${hubNote} • ${dateNote} • ${state.reference.size} aircraft mappings loaded`;
 }
 
 function renderIrrop() {
@@ -874,6 +969,51 @@ function populateStationFilter() {
     .map((station) => `<option value="${escapeHtml(station)}">${escapeHtml(station)}</option>`)
     .join("");
   els.stationFilter.value = state.station;
+}
+
+function populateDateFilter() {
+  const dates = Array.from(availableOperationalDates());
+  if (!dates.length) {
+    state.serviceDate = "";
+    els.dateFilter.value = "";
+    els.dateFilter.removeAttribute("min");
+    els.dateFilter.removeAttribute("max");
+    return;
+  }
+
+  dates.sort();
+  if (!state.serviceDate || !dates.includes(state.serviceDate)) {
+    state.serviceDate = busiestOperationalDate(dates);
+  }
+  els.dateFilter.min = dates[0];
+  els.dateFilter.max = dates[dates.length - 1];
+  els.dateFilter.value = state.serviceDate;
+}
+
+function availableOperationalDates() {
+  const dates = new Set();
+  state.schedule.forEach((row) => {
+    const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
+    if (!stationMatch) return;
+    [row.departure, row.arrival, row.stationTime].forEach((date) => {
+      if (!date) return;
+      dates.add(operationalDateKey(date));
+    });
+  });
+  return dates;
+}
+
+function busiestOperationalDate(dates) {
+  const allowed = new Set(dates);
+  const counts = new Map();
+  state.schedule.forEach((row) => {
+    const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
+    if (!stationMatch) return;
+    const key = operationalDateKey(row.departure || row.stationTime || row.arrival);
+    if (!allowed.has(key)) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || dates[0];
 }
 
 function populateCscFilter() {

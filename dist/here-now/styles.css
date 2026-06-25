@@ -186,6 +186,7 @@ h2 {
 }
 
 .control input[type="number"],
+.control input[type="date"],
 .control input[type="search"],
 .control select {
   width: 100%;

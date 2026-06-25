@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Equipment Demand Planner</title>
     <link rel="stylesheet" href="./styles.css?v=skychefs-slider2" />
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <main class="shell">
@@ -19,7 +20,7 @@
             <button id="mobileMode" type="button">Mobile</button>
           </div>
           <label class="file-button">
-            <input id="scheduleFile" type="file" accept=".csv,text/csv" />
+            <input id="scheduleFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" />
             Load Schedule
           </label>
           <button id="resetButton" type="button">Reset</button>
@@ -35,8 +36,12 @@
       <section id="plannerView">
         <section class="control-band" aria-label="Planner controls">
         <div class="control">
-          <label for="stationFilter">Station</label>
+          <label for="stationFilter">Hub</label>
           <select id="stationFilter"></select>
+        </div>
+        <div class="control">
+          <label for="dateFilter">Date</label>
+          <input id="dateFilter" type="date" />
         </div>
         <div class="control">
           <label for="cscFilter">CSC</label>
