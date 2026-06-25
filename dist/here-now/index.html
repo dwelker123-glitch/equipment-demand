@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Equipment Demand Planner</title>
-    <link rel="stylesheet" href="./styles.css?v=hub-warning-v5" />
+    <link rel="stylesheet" href="./styles.css?v=processing-capacity-v6" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -132,6 +132,7 @@
                 <span><i class="swatch demand"></i>Demand</span>
                 <span><i class="swatch supply"></i>Supply</span>
                 <span><i class="swatch balance"></i>Projected inventory</span>
+                <span data-processing-legend class="hidden"><i class="swatch processing"></i>Processing backlog</span>
                 <span data-warning-legend class="hidden"><i class="swatch warning"></i>Kitchen warning</span>
               </div>
             </div>
@@ -235,6 +236,7 @@
                 <span><i class="swatch demand"></i>Demand</span>
                 <span><i class="swatch supply"></i>Supply</span>
                 <span><i class="swatch balance"></i>Projected inventory</span>
+                <span data-processing-legend class="hidden"><i class="swatch processing"></i>Processing backlog</span>
                 <span data-warning-legend class="hidden"><i class="swatch warning"></i>Kitchen warning</span>
               </div>
             </div>
@@ -295,6 +297,6 @@
         </section>
       </section>
     </main>
-    <script src="./app.js?v=hub-warning-v5"></script>
+    <script src="./app.js?v=processing-capacity-v6"></script>
   </body>
 </html>

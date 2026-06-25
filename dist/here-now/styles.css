@@ -523,6 +523,10 @@ h2 {
   background: #f59e0b;
 }
 
+.swatch.processing {
+  background: #6f5bd6;
+}
+
 .chart-panel canvas {
   display: block;
   width: 100%;

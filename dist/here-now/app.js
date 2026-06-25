@@ -14,6 +14,7 @@ const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
 const FULL_CART_WARNING_QTY = 500;
 const FULL_CART_WARNING_HUBS = new Set(["ORD", "SFO"]);
+const FULL_CART_PROCESSING_CAPACITY_PER_HOUR = 200;
 const DEFAULT_CYCLE_COUNTS = {
   fullCarts: 1574,
   carrierBoxes: 3130,
@@ -31,6 +32,7 @@ const CHART_COLORS = {
   supply: "#214f8f",
   balance: "#7f1d2d",
   warning: "#f59e0b",
+  processing: "#6f5bd6",
   panel: "#ffffff",
 };
 
@@ -70,6 +72,7 @@ const els = {
   scheduleFile: document.querySelector("#scheduleFile"),
   resetButton: document.querySelector("#resetButton"),
   warningLegends: document.querySelectorAll("[data-warning-legend]"),
+  processingLegends: document.querySelectorAll("[data-processing-legend]"),
   stationFilter: document.querySelector("#stationFilter"),
   dateFilter: document.querySelector("#dateFilter"),
   cscFilter: document.querySelector("#cscFilter"),
@@ -739,16 +742,26 @@ function calculate(options = {}) {
     }
   });
 
-  const hourlyRows = Array.from(events.values()).sort((a, b) => a.time - b.time);
+  const processingActive = shouldApplyFullCartProcessing();
+  const hourlyRows = processingActive ? buildHourlyTimeline(events, operationalWindow) : Array.from(events.values()).sort((a, b) => a.time - b.time);
   let inventory = selectedCycleCount();
+  let fullCartProcessingBacklog = 0;
   hourlyRows.forEach((row) => {
+    const supply = { ...row.supply };
+    if (processingActive) {
+      fullCartProcessingBacklog += Number(row.supply.fullCarts || 0);
+      supply.fullCarts = Math.min(FULL_CART_PROCESSING_CAPACITY_PER_HOUR, fullCartProcessingBacklog);
+      fullCartProcessingBacklog -= supply.fullCarts;
+    }
     const demand = totalEquipment(row.demand);
-    const supply = totalEquipment(row.supply);
-    inventory += supply - demand;
+    const totalSupply = totalEquipment(supply);
+    inventory += totalSupply - demand;
+    row.supply = supply;
     row.totalDemand = demand;
-    row.totalSupply = supply;
+    row.totalSupply = totalSupply;
     row.inventory = inventory;
     row.shortfall = Math.max(0, -inventory);
+    row.processingBacklog = processingActive ? fullCartProcessingBacklog : 0;
   });
 
   return {
@@ -780,6 +793,26 @@ function isFlightInOperationalWindow(row, window) {
   return [row.departure, row.arrival, row.stationTime].some((date) => date && isInOperationalWindow(date, window));
 }
 
+function buildHourlyTimeline(events, window) {
+  const rows = [];
+  for (let time = new Date(window.start); time < window.end; time = addHours(time, 1)) {
+    const key = time.toISOString();
+    rows.push(
+      events.get(key) || {
+        time: new Date(time),
+        demand: blankEquipment(),
+        supply: blankEquipment(),
+        totalDemand: 0,
+        totalSupply: 0,
+        inventory: 0,
+        shortfall: 0,
+        processingBacklog: 0,
+      },
+    );
+  }
+  return rows;
+}
+
 function matchesSelectedStation(row) {
   if (state.station === "All") return true;
   if (row.hub) return row.hub === state.station;
@@ -792,6 +825,10 @@ function preferredStation() {
 
 function selectedCycleCount() {
   return selectedEquipment().reduce((sum, item) => sum + cleanNumber(state.cycleCounts[item.key]), 0);
+}
+
+function shouldApplyFullCartProcessing() {
+  return selectedEquipment().some((item) => item.key === "fullCarts");
 }
 
 function addEvent(events, time, direction, equipment) {
@@ -969,6 +1006,9 @@ function syncWarningLegend() {
   els.warningLegends.forEach((legend) => {
     legend.classList.toggle("hidden", !shouldShowFullCartWarning());
   });
+  els.processingLegends.forEach((legend) => {
+    legend.classList.toggle("hidden", !shouldApplyFullCartProcessing());
+  });
 }
 
 function renderSummary({ hourlyRows, inbound, starting, outbound, dailyDemand }) {
@@ -1006,12 +1046,14 @@ function renderSchedule(rows) {
 
 function renderDemandTable(rows) {
   const equipmentColumns = selectedEquipment();
+  const showProcessing = shouldApplyFullCartProcessing();
   els.demandHead.innerHTML = `<tr>
     <th>Hour</th>
     <th>Demand</th>
     <th>Supply</th>
     <th>Inventory</th>
     <th>Shortfall</th>
+    ${showProcessing ? `<th>Processing backlog</th>` : ""}
     ${equipmentColumns.map((item) => `<th>${escapeHtml(item.label)}</th>`).join("")}
   </tr>`;
 
@@ -1022,6 +1064,7 @@ function renderDemandTable(rows) {
       <td>${formatNumber(row.totalSupply)}</td>
       <td>${formatNumber(row.inventory)}</td>
       <td>${formatNumber(row.shortfall)}</td>
+      ${showProcessing ? `<td>${formatNumber(row.processingBacklog)}</td>` : ""}
       ${equipmentColumns.map((item) => `<td>${formatNumber(row.demand[item.key])}</td>`).join("")}
     </tr>`)
     .join("");
@@ -1029,12 +1072,14 @@ function renderDemandTable(rows) {
 
 function renderScenarioTable(rows) {
   const equipmentColumns = selectedEquipment();
+  const showProcessing = shouldApplyFullCartProcessing();
   els.irropHead.innerHTML = `<tr>
     <th>Hour</th>
     <th>Demand</th>
     <th>Supply</th>
     <th>Inventory</th>
     <th>Shortfall</th>
+    ${showProcessing ? `<th>Processing backlog</th>` : ""}
     ${equipmentColumns.map((item) => `<th>${escapeHtml(item.label)}</th>`).join("")}
   </tr>`;
 
@@ -1045,6 +1090,7 @@ function renderScenarioTable(rows) {
       <td>${formatNumber(row.totalSupply)}</td>
       <td>${formatNumber(row.inventory)}</td>
       <td>${formatNumber(row.shortfall)}</td>
+      ${showProcessing ? `<td>${formatNumber(row.processingBacklog)}</td>` : ""}
       ${equipmentColumns.map((item) => `<td>${formatNumber(row.demand[item.key])}</td>`).join("")}
     </tr>`)
     .join("");
@@ -1266,8 +1312,9 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   const pad = { top: 24, right: 28, bottom: 52, left: 58 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
+  const processingActive = shouldApplyFullCartProcessing();
   const warningQty = shouldShowFullCartWarning() ? FULL_CART_WARNING_QTY : 0;
-  const maxY = Math.max(10, warningQty, ...rows.flatMap((row) => [row.totalDemand, row.totalSupply, Math.abs(row.inventory)]));
+  const maxY = Math.max(10, warningQty, ...rows.flatMap((row) => [row.totalDemand, row.totalSupply, Math.abs(row.inventory), processingActive ? row.processingBacklog : 0]));
 
   ctx.fillStyle = CHART_COLORS.panel;
   ctx.fillRect(0, 0, width, height);
@@ -1289,6 +1336,9 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   }
   drawGroupedBars(ctx, rows, pad, plotW, plotH, maxY);
   drawLine(ctx, rows.map((row, index) => [x(index), ySigned(row.inventory)]), CHART_COLORS.balance, 2);
+  if (processingActive) {
+    drawLine(ctx, rows.map((row, index) => [x(index), y(row.processingBacklog)]), CHART_COLORS.processing, 2);
+  }
 
   ctx.fillStyle = CHART_COLORS.ink;
   ctx.font = "12px Inter, system-ui, sans-serif";
@@ -1386,7 +1436,8 @@ function drawLine(ctx, points, color, width) {
 
 function downloadCsv(rows, filename = "equipment-demand-by-hour.csv") {
   const selected = selectedEquipment();
-  const headers = ["Hour", "Demand", "Supply", "Projected Inventory", "Shortfall", ...selected.map((item) => `${item.label} Demand`)];
+  const includeProcessing = shouldApplyFullCartProcessing();
+  const headers = ["Hour", "Demand", "Supply", "Projected Inventory", "Shortfall", ...(includeProcessing ? ["Processing Backlog"] : []), ...selected.map((item) => `${item.label} Demand`)];
   const lines = [
     headers.join(","),
     ...rows.map((row) =>
@@ -1396,6 +1447,7 @@ function downloadCsv(rows, filename = "equipment-demand-by-hour.csv") {
         row.totalSupply,
         row.inventory,
         row.shortfall,
+        ...(includeProcessing ? [row.processingBacklog] : []),
         ...selected.map((item) => row.demand[item.key]),
       ].join(","),
     ),
