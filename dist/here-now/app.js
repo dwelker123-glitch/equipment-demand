@@ -717,7 +717,7 @@ function calculate(options = {}) {
     if (demandEligible) {
       outbound += 1;
       dailyDemand += totalEquipment(equipment);
-      const demandTime = addHours(demandEventTime, -2);
+      const demandTime = addHours(demandEventTime, -6);
       if (isInOperationalWindow(demandTime, operationalWindow)) {
         addEvent(events, hourBucket(demandTime), "demand", equipment);
       }
@@ -728,7 +728,7 @@ function calculate(options = {}) {
 
     if (supplyEligible) {
       inbound += 1;
-      const supplyTime = addHours(supplyEventTime, 2);
+      const supplyTime = addHours(supplyEventTime, 1);
       if (isInOperationalWindow(supplyTime, operationalWindow)) {
         addEvent(events, hourBucket(supplyTime), "supply", equipment);
       }
