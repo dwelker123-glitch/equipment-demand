@@ -12,6 +12,7 @@ const DATA_VERSION = "mainline-mapping-v3";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v3";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
+const ORD_FULL_CART_WARNING_QTY = 500;
 const DEFAULT_CYCLE_COUNTS = {
   fullCarts: 1574,
   carrierBoxes: 3130,
@@ -28,6 +29,7 @@ const CHART_COLORS = {
   demand: "#d92535",
   supply: "#214f8f",
   balance: "#7f1d2d",
+  warning: "#f59e0b",
   panel: "#ffffff",
 };
 
@@ -66,6 +68,7 @@ const els = {
   equipmentView: document.querySelector("#equipmentView"),
   scheduleFile: document.querySelector("#scheduleFile"),
   resetButton: document.querySelector("#resetButton"),
+  warningLegends: document.querySelectorAll("[data-warning-legend]"),
   stationFilter: document.querySelector("#stationFilter"),
   dateFilter: document.querySelector("#dateFilter"),
   cscFilter: document.querySelector("#cscFilter"),
@@ -901,6 +904,7 @@ function render() {
 function renderPlannerOnly() {
   const result = calculate();
   renderSourceLabel();
+  syncWarningLegend();
   renderSummary(result);
   renderSchedule(result.rows);
   renderDemandTable(result.hourlyRows);
@@ -915,6 +919,7 @@ function renderSourceLabel() {
 }
 
 function renderIrrop() {
+  syncWarningLegend();
   syncIrropControls();
   const result = calculate({ scenario: state.irrop });
   els.irropDemandFlights.textContent = formatNumber(result.outbound);
@@ -957,6 +962,12 @@ function applyViewMode() {
   document.body.classList.toggle("desktop-mode", state.viewMode !== "mobile");
   els.desktopMode.classList.toggle("active", state.viewMode !== "mobile");
   els.mobileMode.classList.toggle("active", state.viewMode === "mobile");
+}
+
+function syncWarningLegend() {
+  els.warningLegends.forEach((legend) => {
+    legend.classList.toggle("hidden", !shouldShowOrdFullCartWarning());
+  });
 }
 
 function renderSummary({ hourlyRows, inbound, starting, outbound, dailyDemand }) {
@@ -1254,7 +1265,8 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   const pad = { top: 24, right: 28, bottom: 52, left: 58 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
-  const maxY = Math.max(10, ...rows.flatMap((row) => [row.totalDemand, row.totalSupply, Math.abs(row.inventory)]));
+  const warningQty = shouldShowOrdFullCartWarning() ? ORD_FULL_CART_WARNING_QTY : 0;
+  const maxY = Math.max(10, warningQty, ...rows.flatMap((row) => [row.totalDemand, row.totalSupply, Math.abs(row.inventory)]));
 
   ctx.fillStyle = CHART_COLORS.panel;
   ctx.fillRect(0, 0, width, height);
@@ -1271,6 +1283,9 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   const y = (value) => pad.top + plotH - (value / maxY) * plotH;
   const ySigned = (value) => y(Math.max(0, value));
 
+  if (shouldShowOrdFullCartWarning()) {
+    drawWarningLine(ctx, pad, plotW, y(ORD_FULL_CART_WARNING_QTY));
+  }
   drawGroupedBars(ctx, rows, pad, plotW, plotH, maxY);
   drawLine(ctx, rows.map((row, index) => [x(index), ySigned(row.inventory)]), CHART_COLORS.balance, 2);
 
@@ -1287,6 +1302,28 @@ function drawCurve(rows, canvas = els.curveCanvas) {
     ctx.fillText(label, 0, 0);
     ctx.restore();
   });
+}
+
+function shouldShowOrdFullCartWarning() {
+  return state.station === "ORD" && state.equipment === "fullCarts";
+}
+
+function drawWarningLine(ctx, pad, plotW, y) {
+  ctx.save();
+  ctx.strokeStyle = CHART_COLORS.warning;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  ctx.beginPath();
+  ctx.moveTo(pad.left, y);
+  ctx.lineTo(pad.left + plotW, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = CHART_COLORS.warning;
+  ctx.font = "700 12px Inter, system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(`ORD kitchen warning: ${formatNumber(ORD_FULL_CART_WARNING_QTY)} FC800G`, pad.left + 8, y - 6);
+  ctx.restore();
 }
 
 function drawGroupedBars(ctx, rows, pad, plotW, plotH, maxY) {

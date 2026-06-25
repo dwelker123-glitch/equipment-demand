@@ -519,6 +519,10 @@ h2 {
   background: var(--heritage-red);
 }
 
+.swatch.warning {
+  background: #f59e0b;
+}
+
 .chart-panel canvas {
   display: block;
   width: 100%;
