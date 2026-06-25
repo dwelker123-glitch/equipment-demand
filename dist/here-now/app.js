@@ -360,10 +360,103 @@ async function parseScheduleFile(file) {
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) return [];
   const sheet = workbook.Sheets[sheetName];
+  const arrayRows = window.XLSX.utils.sheet_to_json(sheet, {
+    defval: "",
+    header: 1,
+    raw: true,
+  });
+  const turnsRows = parseTurnsReport(arrayRows);
+  if (turnsRows.length) return turnsRows;
+
   return window.XLSX.utils.sheet_to_json(sheet, {
     defval: "",
     raw: false,
   });
+}
+
+function parseTurnsReport(rows) {
+  const headerIndex = rows.findIndex((row) => {
+    const labels = row.map(normalizeHeaderLabel);
+    return labels.includes("ARRV DATE") && labels.includes("STATION") && labels.includes("DEPARTS");
+  });
+  if (headerIndex < 0) return [];
+
+  const headers = rows[headerIndex].map(normalizeHeaderLabel);
+  const dateIndex = headers.indexOf("ARRV DATE");
+  const fromIndex = headers.indexOf("FROM");
+  const arrivesIndex = headers.indexOf("ARRIVES");
+  const aircraftIndex = headers.indexOf("A/C");
+  const stationIndex = headers.indexOf("STATION");
+  const toIndex = headers.indexOf("TO");
+  const departsIndex = headers.indexOf("DEPARTS");
+  const inboundFlightIndex = headers.findIndex((label, index) => label === "FLIGHT" && index > dateIndex && index < fromIndex);
+  const outboundFlightIndex = headers.findIndex((label, index) => label === "FLIGHT" && index > stationIndex && index < toIndex);
+
+  if ([dateIndex, fromIndex, arrivesIndex, aircraftIndex, stationIndex, toIndex, departsIndex, outboundFlightIndex].some((index) => index < 0)) {
+    return [];
+  }
+
+  return rows
+    .slice(headerIndex + 1)
+    .map((row, index) => {
+      const serviceDate = row[dateIndex];
+      const station = normalizeStation(row[stationIndex]);
+      const aircraft = normalizeAircraft(row[aircraftIndex]);
+      const departure = combineDateAndTime(serviceDate, row[departsIndex]);
+      const arrival = combineDateAndTime(serviceDate, row[arrivesIndex]);
+      if (departure && arrival && departure < arrival) departure.setDate(departure.getDate() + 1);
+
+      return {
+        "Flight Number": row[outboundFlightIndex] || `Turn ${index + 1}`,
+        "Inbound Flight Number": inboundFlightIndex >= 0 ? row[inboundFlightIndex] : "",
+        "Aircraft Type": aircraft,
+        "Scheduled Departure": departure,
+        "Actual Arrival or ETA": arrival,
+        "Station Event Time": departure,
+        Date: departure || arrival,
+        Origin: station,
+        Destination: normalizeStation(row[toIndex]),
+        "Inbound Origin": normalizeStation(row[fromIndex]),
+        CSC: "",
+        "Flight Status": "Scheduled",
+      };
+    })
+    .filter((row) => row["Aircraft Type"] && row.Origin && (row["Scheduled Departure"] || row["Actual Arrival or ETA"]));
+}
+
+function normalizeHeaderLabel(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+function normalizeStation(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function combineDateAndTime(dateValue, timeValue) {
+  const date = coerceDate(dateValue);
+  if (!date) return null;
+  const output = new Date(date);
+  const time = coerceTime(timeValue);
+  if (!time) return output;
+  output.setHours(time.hours, time.minutes, 0, 0);
+  return output;
+}
+
+function coerceTime(value) {
+  if (value == null || value === "") return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return { hours: value.getHours(), minutes: value.getMinutes() };
+  }
+  if (typeof value === "number") {
+    const dayFraction = ((value % 1) + 1) % 1;
+    const totalMinutes = Math.round(dayFraction * 24 * 60);
+    return { hours: Math.floor(totalMinutes / 60) % 24, minutes: totalMinutes % 60 };
+  }
+  const timeParts = parseTimeParts(value);
+  if (timeParts) return timeParts;
+  const parsed = coerceDate(value);
+  if (!parsed) return null;
+  return { hours: parsed.getHours(), minutes: parsed.getMinutes() };
 }
 
 function parseCsv(text) {
