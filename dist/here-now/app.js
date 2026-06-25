@@ -158,9 +158,11 @@ function bindEvents() {
     const file = event.target.files[0];
     if (!file) return;
     try {
+      els.sourceLabel.textContent = `Loading ${file.name}...`;
+      await nextFrame();
       state.schedule = normalizeSchedule(await parseScheduleFile(file));
       state.sourceName = file.name;
-      state.station = "All";
+      state.station = preferredStation();
       state.csc = "All";
       state.serviceDate = "";
       populateStationFilter();
@@ -343,6 +345,10 @@ function bindEvents() {
   });
 }
 
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 async function parseScheduleFile(file) {
   const extension = file.name.split(".").pop().toLowerCase();
   if (extension === "csv") return parseCsv(await file.text());
@@ -410,6 +416,7 @@ function parseTurnsReport(rows) {
         "Flight Number": row[outboundFlightIndex] || `Turn ${index + 1}`,
         "Inbound Flight Number": inboundFlightIndex >= 0 ? row[inboundFlightIndex] : "",
         "Aircraft Type": aircraft,
+        Hub: station,
         "Scheduled Departure": departure,
         "Actual Arrival or ETA": arrival,
         "Station Event Time": departure,
@@ -580,6 +587,7 @@ function normalizeSchedule(rows) {
     const status = first(row, ["Flight Status", "Status"]) || "Scheduled";
     const origin = first(row, ["Origin", "From"]) || "";
     const destination = first(row, ["Destination", "To"]) || "";
+    const hub = first(row, ["Hub", "Station", "STATION"]) || "";
     const csc = first(row, ["CSC", "Handling", "Hdlng"]) || "";
     const stationTime = parseDateTime(first(row, ["Station Event Time"]), first(row, ["Date", "Departure"]), first(row, ["Depart ", "Depart"]));
     return {
@@ -593,6 +601,7 @@ function normalizeSchedule(rows) {
       gate: first(row, ["Gate"]) || "",
       origin,
       destination,
+      hub,
       csc,
       raw: row,
     };
@@ -654,7 +663,7 @@ function parseTimeParts(value) {
 function calculate(options = {}) {
   const scenario = options.scenario || null;
   const baseRows = state.schedule.filter((row) => {
-    const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
+    const stationMatch = matchesSelectedStation(row);
     const cscMatch = state.csc === "All" || row.csc === state.csc;
     return stationMatch && cscMatch;
   });
@@ -674,8 +683,9 @@ function calculate(options = {}) {
     const equipment = state.reference.get(flight.aircraft);
     const cancelled = /cancel/i.test(flight.status);
     const stationScoped = state.station !== "All";
-    const outboundCandidate = stationScoped ? flight.origin === state.station : Boolean(flight.origin || flight.departure);
-    const inboundCandidate = stationScoped ? flight.destination === state.station || (flight.origin === state.station && flight.arrival) : Boolean(flight.arrival);
+    const hubScoped = stationScoped && flight.hub;
+    const outboundCandidate = stationScoped ? (hubScoped ? flight.hub === state.station : flight.origin === state.station) : Boolean(flight.origin || flight.departure);
+    const inboundCandidate = stationScoped ? (hubScoped ? flight.hub === state.station && Boolean(flight.arrival) : flight.destination === state.station || (flight.origin === state.station && flight.arrival)) : Boolean(flight.arrival);
     const originalDemandEventTime = flight.departure || flight.stationTime;
     const originalSupplyEventTime = flight.arrival || (originalDemandEventTime ? addHours(originalDemandEventTime, -8) : null);
     let demandEventTime = originalDemandEventTime;
@@ -754,7 +764,7 @@ function calculate(options = {}) {
 
 function filteredSchedule() {
   const stationRows = state.schedule.filter((row) => {
-    const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
+    const stationMatch = matchesSelectedStation(row);
     const cscMatch = state.csc === "All" || row.csc === state.csc;
     return stationMatch && cscMatch;
   });
@@ -764,6 +774,16 @@ function filteredSchedule() {
 
 function isFlightInOperationalWindow(row, window) {
   return [row.departure, row.arrival, row.stationTime].some((date) => date && isInOperationalWindow(date, window));
+}
+
+function matchesSelectedStation(row) {
+  if (state.station === "All") return true;
+  if (row.hub) return row.hub === state.station;
+  return row.origin === state.station || row.destination === state.station;
+}
+
+function preferredStation() {
+  return state.schedule.some((row) => row.hub === "ORD" || row.origin === "ORD" || row.destination === "ORD") ? "ORD" : "All";
 }
 
 function selectedCycleCount() {
@@ -825,7 +845,7 @@ function getOperationalWindow(rows) {
   }
 
   const outboundDates = rows
-    .filter((row) => state.station === "All" || row.origin === state.station)
+    .filter((row) => state.station === "All" || (row.hub ? row.hub === state.station : row.origin === state.station))
     .map((row) => row.departure || row.stationTime)
     .filter(Boolean);
   const counts = new Map();
@@ -1053,6 +1073,10 @@ function renderReferenceTable() {
 function populateStationFilter() {
   const stations = new Set(["All"]);
   state.schedule.forEach((row) => {
+    if (row.hub) {
+      stations.add(row.hub);
+      return;
+    }
     if (row.origin) stations.add(row.origin);
     if (row.destination) stations.add(row.destination);
   });
@@ -1086,7 +1110,7 @@ function populateDateFilter() {
 function availableOperationalDates() {
   const dates = new Set();
   state.schedule.forEach((row) => {
-    const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
+    const stationMatch = matchesSelectedStation(row);
     if (!stationMatch) return;
     [row.departure, row.arrival, row.stationTime].forEach((date) => {
       if (!date) return;
@@ -1100,7 +1124,7 @@ function busiestOperationalDate(dates) {
   const allowed = new Set(dates);
   const counts = new Map();
   state.schedule.forEach((row) => {
-    const stationMatch = state.station === "All" || row.origin === state.station || row.destination === state.station;
+    const stationMatch = matchesSelectedStation(row);
     if (!stationMatch) return;
     const key = operationalDateKey(row.departure || row.stationTime || row.arrival);
     if (!allowed.has(key)) return;
@@ -1112,7 +1136,7 @@ function busiestOperationalDate(dates) {
 function populateCscFilter() {
   const cscs = new Set(["All"]);
   state.schedule.forEach((row) => {
-    if (state.station !== "All" && row.origin !== state.station) return;
+    if (!matchesSelectedStation(row)) return;
     if (row.csc) cscs.add(row.csc);
   });
   els.cscFilter.innerHTML = Array.from(cscs)
