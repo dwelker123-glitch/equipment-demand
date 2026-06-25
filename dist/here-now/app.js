@@ -12,7 +12,8 @@ const DATA_VERSION = "mainline-mapping-v3";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v3";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
-const ORD_FULL_CART_WARNING_QTY = 500;
+const FULL_CART_WARNING_QTY = 500;
+const FULL_CART_WARNING_HUBS = new Set(["ORD", "SFO"]);
 const DEFAULT_CYCLE_COUNTS = {
   fullCarts: 1574,
   carrierBoxes: 3130,
@@ -966,7 +967,7 @@ function applyViewMode() {
 
 function syncWarningLegend() {
   els.warningLegends.forEach((legend) => {
-    legend.classList.toggle("hidden", !shouldShowOrdFullCartWarning());
+    legend.classList.toggle("hidden", !shouldShowFullCartWarning());
   });
 }
 
@@ -1265,7 +1266,7 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   const pad = { top: 24, right: 28, bottom: 52, left: 58 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
-  const warningQty = shouldShowOrdFullCartWarning() ? ORD_FULL_CART_WARNING_QTY : 0;
+  const warningQty = shouldShowFullCartWarning() ? FULL_CART_WARNING_QTY : 0;
   const maxY = Math.max(10, warningQty, ...rows.flatMap((row) => [row.totalDemand, row.totalSupply, Math.abs(row.inventory)]));
 
   ctx.fillStyle = CHART_COLORS.panel;
@@ -1283,8 +1284,8 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   const y = (value) => pad.top + plotH - (value / maxY) * plotH;
   const ySigned = (value) => y(Math.max(0, value));
 
-  if (shouldShowOrdFullCartWarning()) {
-    drawWarningLine(ctx, pad, plotW, y(ORD_FULL_CART_WARNING_QTY));
+  if (shouldShowFullCartWarning()) {
+    drawWarningLine(ctx, pad, plotW, y(FULL_CART_WARNING_QTY));
   }
   drawGroupedBars(ctx, rows, pad, plotW, plotH, maxY);
   drawLine(ctx, rows.map((row, index) => [x(index), ySigned(row.inventory)]), CHART_COLORS.balance, 2);
@@ -1304,8 +1305,8 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   });
 }
 
-function shouldShowOrdFullCartWarning() {
-  return state.station === "ORD" && state.equipment === "fullCarts";
+function shouldShowFullCartWarning() {
+  return FULL_CART_WARNING_HUBS.has(state.station) && state.equipment === "fullCarts";
 }
 
 function drawWarningLine(ctx, pad, plotW, y) {
@@ -1322,7 +1323,7 @@ function drawWarningLine(ctx, pad, plotW, y) {
   ctx.font = "700 12px Inter, system-ui, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "bottom";
-  ctx.fillText(`ORD kitchen warning: ${formatNumber(ORD_FULL_CART_WARNING_QTY)} FC800G`, pad.left + 8, y - 6);
+  ctx.fillText(`${state.station} kitchen warning: ${formatNumber(FULL_CART_WARNING_QTY)} FC800G`, pad.left + 8, y - 6);
   ctx.restore();
 }
 
