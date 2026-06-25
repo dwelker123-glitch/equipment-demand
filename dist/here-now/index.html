@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Equipment Demand Planner</title>
+    <link rel="stylesheet" href="./styles.css?v=skychefs-slider2" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>Equipment Demand Planner</h1>
+          <p id="sourceLabel">Loading schedule and aircraft equipment reference...</p>
+        </div>
+        <div class="actions">
+          <div class="view-toggle" role="group" aria-label="View mode">
+            <button id="desktopMode" class="active" type="button">Desktop</button>
+            <button id="mobileMode" type="button">Mobile</button>
+          </div>
+          <label class="file-button">
+            <input id="scheduleFile" type="file" accept=".csv,text/csv" />
+            Load Schedule
+          </label>
+          <button id="resetButton" type="button">Reset</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Planner tabs">
+        <button id="plannerTab" class="tab active" type="button">Demand</button>
+        <button id="irropTab" class="tab" type="button">IRROP Planner</button>
+        <button id="equipmentTab" class="tab" type="button">Aircraft Equipment</button>
+      </nav>
+
+      <section id="plannerView">
+        <section class="control-band" aria-label="Planner controls">
+        <div class="control">
+          <label for="stationFilter">Station</label>
+          <select id="stationFilter"></select>
+        </div>
+        <div class="control">
+          <label for="cscFilter">CSC</label>
+          <select id="cscFilter"></select>
+        </div>
+        <div class="control">
+          <label for="equipmentFilter">Equipment</label>
+          <select id="equipmentFilter"></select>
+        </div>
+        <div class="control">
+          <label for="cycle_fullCarts">FC800G</label>
+          <input id="cycle_fullCarts" data-cycle-key="fullCarts" type="number" min="0" step="1" />
+        </div>
+        <div class="control">
+          <label for="cycle_carrierBoxes">CB806G</label>
+          <input id="cycle_carrierBoxes" data-cycle-key="carrierBoxes" type="number" min="0" step="1" />
+        </div>
+        <div class="control">
+          <label for="cycle_halfCarts">HC801G</label>
+          <input id="cycle_halfCarts" data-cycle-key="halfCarts" type="number" min="0" step="1" />
+        </div>
+        <div class="control">
+          <label for="cycle_airbusCarts">CA777</label>
+          <input id="cycle_airbusCarts" data-cycle-key="airbusCarts" type="number" min="0" step="1" />
+        </div>
+        <div class="control">
+          <label for="cycle_airbusCarriers">CA767</label>
+          <input id="cycle_airbusCarriers" data-cycle-key="airbusCarriers" type="number" min="0" step="1" />
+        </div>
+        </section>
+
+        <section class="summary-grid" aria-label="Summary">
+        <article class="metric">
+          <span>Demand flights</span>
+          <strong id="outboundFlights">0</strong>
+        </article>
+        <article class="metric">
+          <span>Supply flights</span>
+          <strong id="eligibleFlights">0</strong>
+        </article>
+        <article class="metric">
+          <span>Starting cycle count</span>
+          <strong id="excludedFlights">0</strong>
+        </article>
+        <article class="metric">
+          <span id="selectedDailyDemandLabel">Daily demand</span>
+          <strong id="selectedDailyDemand">0</strong>
+        </article>
+        <article class="metric">
+          <span>Peak hourly demand</span>
+          <strong id="peakDemand">0</strong>
+        </article>
+        <article class="metric">
+          <span>Max projected shortfall</span>
+          <strong id="maxShortfall">0</strong>
+        </article>
+        </section>
+
+        <section class="workspace">
+        <aside class="panel side-panel">
+          <div class="panel-head">
+              <h2>Schedule</h2>
+            <span id="scheduleCount">0 rows</span>
+          </div>
+          <div class="table-wrap compact">
+            <table>
+              <thead>
+                <tr>
+                  <th>Flight</th>
+                  <th>AC</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>CSC</th>
+                  <th>Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="scheduleBody"></tbody>
+            </table>
+          </div>
+        </aside>
+
+        <section class="main-stack">
+          <section class="panel chart-panel">
+            <div class="panel-head">
+              <h2>Supply and Demand</h2>
+              <div class="legend">
+                <span><i class="swatch demand"></i>Demand</span>
+                <span><i class="swatch supply"></i>Supply</span>
+                <span><i class="swatch balance"></i>Projected inventory</span>
+              </div>
+            </div>
+            <canvas id="curveCanvas" width="1200" height="430" aria-label="Supply and demand curve"></canvas>
+          </section>
+
+          <section class="split">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Demand by Hour</h2>
+                <button id="downloadDemand" type="button">Export CSV</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead id="demandHead"></thead>
+                  <tbody id="demandBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Aircraft Gaps</h2>
+                <span id="gapCount">0 types</span>
+              </div>
+              <div id="gapList" class="gap-list"></div>
+            </section>
+          </section>
+        </section>
+        </section>
+      </section>
+
+      <section id="irropView" class="hidden">
+        <section class="irrop-layout">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Scenario Controls</h2>
+              <button id="resetIrrop" type="button">Reset Scenario</button>
+            </div>
+            <div class="scenario-grid">
+              <div class="control window-control">
+                <label for="irropArrivalStart">Arrival window <span id="irropArrivalWindowValue">9 AM - 11 AM</span></label>
+                <div class="range-pair" data-window="arrival">
+                  <input id="irropArrivalStart" class="range-start" type="range" min="0" max="23" step="1" value="9" aria-label="Arrival window start" />
+                  <input id="irropArrivalEnd" class="range-end" type="range" min="0" max="23" step="1" value="11" aria-label="Arrival window end" />
+                </div>
+              </div>
+              <div class="control">
+                <label for="irropArrivalDelay">Arrival delay <span id="irropArrivalDelayValue">1 hr</span></label>
+                <input id="irropArrivalDelay" type="range" min="0" max="6" step="0.5" value="1" />
+              </div>
+              <div class="control window-control">
+                <label for="irropDepartureStart">Departure window <span id="irropDepartureWindowValue">9 AM - 11 AM</span></label>
+                <div class="range-pair" data-window="departure">
+                  <input id="irropDepartureStart" class="range-start" type="range" min="0" max="23" step="1" value="9" aria-label="Departure window start" />
+                  <input id="irropDepartureEnd" class="range-end" type="range" min="0" max="23" step="1" value="11" aria-label="Departure window end" />
+                </div>
+              </div>
+              <div class="control">
+                <label for="irropDepartureDelay">Departure delay <span id="irropDepartureDelayValue">0 hr</span></label>
+                <input id="irropDepartureDelay" type="range" min="0" max="6" step="0.5" value="0" />
+              </div>
+              <label class="toggle-control">
+                <input id="irropGroundStop" type="checkbox" />
+                <span>Ground stop arrivals in window</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="summary-grid irrop-summary" aria-label="IRROP summary">
+            <article class="metric">
+              <span>Demand flights</span>
+              <strong id="irropDemandFlights">0</strong>
+            </article>
+            <article class="metric">
+              <span>Supply flights</span>
+              <strong id="irropSupplyFlights">0</strong>
+            </article>
+            <article class="metric">
+              <span>Delayed arrivals</span>
+              <strong id="irropDelayedArrivals">0</strong>
+            </article>
+            <article class="metric">
+              <span>Delayed departures</span>
+              <strong id="irropDelayedDepartures">0</strong>
+            </article>
+            <article class="metric">
+              <span>Ground stop moves</span>
+              <strong id="irropGroundStopMoves">0</strong>
+            </article>
+            <article class="metric">
+              <span>Max projected shortfall</span>
+              <strong id="irropShortfall">0</strong>
+            </article>
+          </section>
+
+          <section class="panel chart-panel">
+            <div class="panel-head">
+              <h2>IRROP Supply and Demand</h2>
+              <div class="legend">
+                <span><i class="swatch demand"></i>Demand</span>
+                <span><i class="swatch supply"></i>Supply</span>
+                <span><i class="swatch balance"></i>Projected inventory</span>
+              </div>
+            </div>
+            <canvas id="irropCanvas" width="1200" height="430" aria-label="IRROP supply and demand chart"></canvas>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>IRROP by Hour</h2>
+              <button id="downloadIrrop" type="button">Export CSV</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead id="irropHead"></thead>
+                <tbody id="irropBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <section id="equipmentView" class="equipment-view hidden">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Aircraft Equipment Reference</h2>
+              <span id="equipmentCount">0 mappings</span>
+            </div>
+            <div class="actions">
+              <button id="addEquipmentRow" type="button">Add Aircraft</button>
+              <button id="downloadReference" type="button">Export CSV</button>
+              <button id="resetReference" type="button">Reset Table</button>
+            </div>
+          </div>
+          <div class="equipment-tools">
+            <div class="control">
+              <label for="referenceSearch">Find aircraft</label>
+              <input id="referenceSearch" type="search" placeholder="A320, 73Y, E75" />
+            </div>
+          </div>
+          <div class="table-wrap equipment-table-wrap">
+            <table class="equipment-table">
+              <thead>
+                <tr>
+                  <th>Aircraft Type</th>
+                  <th>Full Carts</th>
+                  <th>Half Carts</th>
+                  <th>Carrier Boxes</th>
+                  <th>Airbus Carts</th>
+                  <th>Airbus Carriers</th>
+                  <th>Notes</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="referenceBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="./app.js?v=skychefs-slider2"></script>
+  </body>
+</html>
