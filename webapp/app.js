@@ -9,8 +9,8 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/Volare-6_WebSchedule.csv";
 const DEFAULT_SOURCE_NAME = "Volare-6 export";
-const DATA_VERSION = "equipment-capacity-v1";
-const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v4";
+const DATA_VERSION = "final-hold-capacity-v1";
+const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
 const FULL_CART_WARNING_QTY = 500;
@@ -539,16 +539,13 @@ function parseCsv(text) {
 function buildReferenceRows(rows) {
   return rows
     .map((row) => {
-      const fullCarts = cleanNumber(row["Full Carts"]);
-      const halfCarts = cleanNumber(row["Half Carts"]);
-      const airbusCarts = cleanNumber(row["Airbus Carts"]);
       return {
         aircraftType: normalizeAircraft(row["Aircraft Type"]),
-        fullCarts,
-        halfCarts,
-        beverageCarts: hasValue(row["Beverage Carts"]) ? cleanNumber(row["Beverage Carts"]) : fullCarts + halfCarts + airbusCarts,
+        fullCarts: cleanNumber(row["Full Carts"]),
+        halfCarts: cleanNumber(row["Half Carts"]),
+        beverageCarts: hasValue(row["Beverage Carts"]) ? cleanNumber(row["Beverage Carts"]) : 0,
         carrierBoxes: cleanNumber(row["Carrier Boxes"]),
-        airbusCarts,
+        airbusCarts: cleanNumber(row["Airbus Carts"]),
         airbusCarriers: cleanNumber(row["Airbus Carriers"] || row["Dog Houses"]),
         notes: row.Notes || "",
       };
@@ -599,16 +596,13 @@ function loadStoredReferenceRows() {
     const rows = JSON.parse(raw);
     if (!Array.isArray(rows)) return null;
     return rows.map((row) => {
-      const fullCarts = cleanNumber(row.fullCarts);
-      const halfCarts = cleanNumber(row.halfCarts);
-      const airbusCarts = cleanNumber(row.airbusCarts);
       return {
         aircraftType: normalizeAircraft(row.aircraftType),
-        fullCarts,
-        halfCarts,
-        beverageCarts: hasValue(row.beverageCarts) ? cleanNumber(row.beverageCarts) : fullCarts + halfCarts + airbusCarts,
+        fullCarts: cleanNumber(row.fullCarts),
+        halfCarts: cleanNumber(row.halfCarts),
+        beverageCarts: hasValue(row.beverageCarts) ? cleanNumber(row.beverageCarts) : 0,
         carrierBoxes: cleanNumber(row.carrierBoxes),
-        airbusCarts,
+        airbusCarts: cleanNumber(row.airbusCarts),
         airbusCarriers: cleanNumber(row.airbusCarriers || row.dogHouses),
         notes: row.notes || "",
       };
