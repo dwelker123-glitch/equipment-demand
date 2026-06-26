@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Equipment Demand Planner</title>
     <link rel="icon" type="image/svg+xml" href="./assets/skychefs-logo-pride-red.svg?v=skychefs-icon-v1" />
-    <link rel="stylesheet" href="./styles.css?v=ua-june-2026-rollover-v1" />
+    <link rel="stylesheet" href="./styles.css?v=assembly-shift-capacity-v1" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -272,7 +272,29 @@
                 <label for="holdTimeSlider">Average Hold Time <span id="holdTimeValue">3 hours</span></label>
                 <input id="holdTimeSlider" type="range" min="0.5" max="6" step="0.5" value="3" />
               </div>
+              <div class="control shift-control">
+                <label for="shift1Start">Shift 1</label>
+                <div class="time-pair">
+                  <input id="shift1Start" data-shift-index="0" data-shift-field="start" type="time" value="06:00" />
+                  <input id="shift1End" data-shift-index="0" data-shift-field="end" type="time" value="14:00" />
+                </div>
+              </div>
+              <div class="control shift-control">
+                <label for="shift2Start">Shift 2</label>
+                <div class="time-pair">
+                  <input id="shift2Start" data-shift-index="1" data-shift-field="start" type="time" value="14:00" />
+                  <input id="shift2End" data-shift-index="1" data-shift-field="end" type="time" value="22:00" />
+                </div>
+              </div>
+              <div class="control shift-control">
+                <label for="shift3Start">Shift 3</label>
+                <div class="time-pair">
+                  <input id="shift3Start" data-shift-index="2" data-shift-field="start" type="time" value="22:00" />
+                  <input id="shift3End" data-shift-index="2" data-shift-field="end" type="time" value="06:00" />
+                </div>
+              </div>
             </div>
+            <div id="capacityError" class="capacity-error hidden"></div>
           </section>
 
           <section class="summary-grid capacity-summary" aria-label="Capacity summary">
@@ -302,14 +324,18 @@
 
           <section class="panel">
             <div class="panel-head">
-              <h2>Projection by Time Bucket</h2>
+              <h2>Projection by Hour</h2>
             </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Time</th>
-                    <th>Beverage carts in hold window</th>
+                    <th>Assembly Active</th>
+                    <th>Original hourly demand</th>
+                    <th>Reassigned/shifted demand</th>
+                    <th>Adjusted build requirement</th>
+                    <th>Final hold inventory</th>
                     <th>Required sq ft</th>
                   </tr>
                 </thead>
@@ -360,6 +386,6 @@
         </section>
       </section>
     </main>
-    <script src="./app.js?v=ua-june-2026-rollover-v1"></script>
+    <script src="./app.js?v=assembly-shift-capacity-v1"></script>
   </body>
 </html>

@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "ua-june-2026-rollover-v1";
+const DATA_VERSION = "assembly-shift-capacity-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -58,6 +58,11 @@ const state = {
     groundStop: false,
   },
   holdTimeHours: 3,
+  assemblyShifts: [
+    { start: "06:00", end: "14:00" },
+    { start: "14:00", end: "22:00" },
+    { start: "22:00", end: "06:00" },
+  ],
   viewMode: "desktop",
   activeView: "planner",
   sourceName: DEFAULT_SOURCE_NAME,
@@ -135,6 +140,8 @@ const els = {
   capacityPeakSqFt: document.querySelector("#capacityPeakSqFt"),
   capacityCanvas: document.querySelector("#capacityCanvas"),
   capacityBody: document.querySelector("#capacityBody"),
+  capacityError: document.querySelector("#capacityError"),
+  shiftInputs: document.querySelectorAll("[data-shift-index]"),
 };
 
 async function boot() {
@@ -274,6 +281,16 @@ function bindEvents() {
     renderCapacity();
   });
 
+  els.shiftInputs.forEach((input) => {
+    input.addEventListener("input", () => {
+      const index = Number(input.dataset.shiftIndex);
+      const field = input.dataset.shiftField;
+      if (!Number.isInteger(index) || !field) return;
+      state.assemblyShifts[index][field] = input.value;
+      renderCapacity();
+    });
+  });
+
   [
     ["irropArrivalStart", "arrivalStart"],
     ["irropArrivalEnd", "arrivalEnd"],
@@ -386,7 +403,7 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     drawCurve(calculate().hourlyRows, els.curveCanvas);
     drawCurve(calculate({ scenario: state.irrop }).hourlyRows, els.irropCanvas);
-    drawCapacityChart(calculateCapacityProjection().rows);
+    drawCurrentCapacityChart();
   });
 }
 
@@ -836,6 +853,7 @@ function calculate(options = {}) {
 }
 
 function calculateCapacityProjection() {
+  const assemblyShifts = validateAssemblyShifts();
   const baseRows = state.schedule.filter((row) => {
     const stationMatch = matchesSelectedStation(row);
     const cscMatch = state.csc === "All" || row.csc === state.csc;
@@ -863,23 +881,62 @@ function calculateCapacityProjection() {
     });
   });
 
-  const buckets = buildHalfHourBuckets(operationalWindow);
-  const holdTimeMs = state.holdTimeHours * 60 * 60 * 1000;
-  const projectionRows = buckets.map((bucket) => {
-    const windowEnd = new Date(bucket.getTime() + holdTimeMs);
-    const carts = demandEvents.reduce((sum, event) => (event.time >= bucket && event.time < windowEnd ? sum + event.carts : sum), 0);
-    return {
-      time: bucket,
-      carts,
-      squareFeet: carts * 3,
-    };
+  const buckets = buildHourlyBuckets(operationalWindow);
+  const demandByHour = new Map();
+  demandEvents.forEach((event) => {
+    const bucket = hourBucket(event.time);
+    const key = bucket.toISOString();
+    demandByHour.set(key, (demandByHour.get(key) || 0) + event.carts);
   });
 
-  const peakRow = projectionRows.reduce((peak, row) => (row.squareFeet > peak.squareFeet ? row : peak), {
+  const projectionRows = buckets.map((bucket) => ({
+    time: bucket,
+    assemblyActive: isAssemblyActive(bucket, assemblyShifts) ? 1 : 0,
+    originalDemand: demandByHour.get(bucket.toISOString()) || 0,
+    baseHoldInventory: demandEvents.reduce((sum, event) => {
+      const windowEnd = addHours(bucket, state.holdTimeHours);
+      return event.time >= bucket && event.time < windowEnd ? sum + event.carts : sum;
+    }, 0),
+    shiftedIn: 0,
+    shiftedOut: 0,
+    shiftedTo: null,
+    adjustedBuild: 0,
+    shiftInventory: 0,
+    inventory: 0,
+    squareFeet: 0,
+  }));
+
+  let priorActiveIndex = -1;
+  projectionRows.forEach((row, index) => {
+    if (row.assemblyActive) {
+      priorActiveIndex = index;
+      return;
+    }
+    if (row.originalDemand <= 0) return;
+    if (priorActiveIndex < 0) {
+      throw new Error(`Unresolved offshift demand at ${formatHourWithMinutes(row.time)}: no prior active assembly shift hour exists in the selected 24-hour cycle.`);
+    }
+    projectionRows[priorActiveIndex].shiftedIn += row.originalDemand;
+    row.shiftedOut = row.originalDemand;
+    row.shiftedTo = projectionRows[priorActiveIndex].time;
+  });
+
+  let inventory = 0;
+  projectionRows.forEach((row) => {
+    row.adjustedBuild = row.assemblyActive ? row.originalDemand + row.shiftedIn : 0;
+    inventory += row.adjustedBuild - row.originalDemand;
+    row.shiftInventory = inventory;
+    row.inventory = Math.max(row.baseHoldInventory, row.shiftInventory);
+    row.squareFeet = row.inventory * 3;
+  });
+
+  const peakRow = projectionRows.reduce((peak, row) => (row.inventory > peak.inventory ? row : peak), {
     time: null,
     carts: 0,
+    inventory: 0,
     squareFeet: 0,
   });
+  peakRow.carts = peakRow.inventory;
 
   return {
     rows: projectionRows,
@@ -887,12 +944,81 @@ function calculateCapacityProjection() {
   };
 }
 
-function buildHalfHourBuckets(window) {
+function buildHourlyBuckets(window) {
   const buckets = [];
-  for (let time = new Date(window.start); time < window.end; time = addHours(time, 0.5)) {
+  for (let time = new Date(window.start); time < window.end; time = addHours(time, 1)) {
     buckets.push(new Date(time));
   }
   return buckets;
+}
+
+function validateAssemblyShifts() {
+  const shifts = state.assemblyShifts
+    .map((shift, index) => ({ ...shift, index }))
+    .filter((shift) => shift.start || shift.end);
+
+  if (!shifts.length) {
+    throw new Error("Assembly shift setup is missing: define at least one shift start and end time.");
+  }
+
+  const parsed = shifts.map((shift) => {
+    if (!shift.start || !shift.end) {
+      throw new Error(`Assembly Shift ${shift.index + 1} is incomplete: enter both a start time and an end time.`);
+    }
+    const start = parseShiftTime(shift.start, shift.index, "start");
+    const end = parseShiftTime(shift.end, shift.index, "end");
+    if (start === end) {
+      throw new Error(`Assembly Shift ${shift.index + 1} is invalid: start and end time cannot be the same.`);
+    }
+    return { ...shift, startMinutes: start, endMinutes: end };
+  });
+
+  const intervals = parsed.flatMap((shift) => splitShiftIntervals(shift));
+  for (let i = 0; i < intervals.length; i += 1) {
+    for (let j = i + 1; j < intervals.length; j += 1) {
+      const a = intervals[i];
+      const b = intervals[j];
+      if (a.shiftIndex === b.shiftIndex) continue;
+      if (Math.max(a.start, b.start) < Math.min(a.end, b.end)) {
+        throw new Error(`Assembly Shift ${a.shiftIndex + 1} overlaps Assembly Shift ${b.shiftIndex + 1}. Adjust shift windows before running final hold capacity.`);
+      }
+    }
+  }
+
+  return parsed;
+}
+
+function parseShiftTime(value, index, field) {
+  const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+  if (!match) {
+    throw new Error(`Assembly Shift ${index + 1} ${field} time is malformed: use HH:MM in 24-hour format.`);
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    throw new Error(`Assembly Shift ${index + 1} ${field} time is invalid: use HH:MM in 24-hour format.`);
+  }
+  return hours * 60 + minutes;
+}
+
+function splitShiftIntervals(shift) {
+  if (shift.startMinutes < shift.endMinutes) {
+    return [{ shiftIndex: shift.index, start: shift.startMinutes, end: shift.endMinutes }];
+  }
+  return [
+    { shiftIndex: shift.index, start: shift.startMinutes, end: 24 * 60 },
+    { shiftIndex: shift.index, start: 0, end: shift.endMinutes },
+  ];
+}
+
+function isAssemblyActive(date, shifts) {
+  const minuteOfDay = date.getHours() * 60 + date.getMinutes();
+  return shifts.some((shift) => {
+    if (shift.startMinutes < shift.endMinutes) {
+      return minuteOfDay >= shift.startMinutes && minuteOfDay < shift.endMinutes;
+    }
+    return minuteOfDay >= shift.startMinutes || minuteOfDay < shift.endMinutes;
+  });
 }
 
 function filteredSchedule() {
@@ -1100,13 +1226,25 @@ function renderIrrop() {
 }
 
 function renderCapacity() {
-  const result = calculateCapacityProjection();
   syncCapacityControls();
-  els.capacityWindowCarts.textContent = formatNumber(result.peakRow.carts);
-  els.capacityWindowSqFt.textContent = formatNumber(result.peakRow.squareFeet);
-  els.capacityPeakSqFt.textContent = formatNumber(result.peakRow.squareFeet);
-  renderCapacityTable(result.rows);
-  drawCapacityChart(result.rows);
+  try {
+    const result = calculateCapacityProjection();
+    els.capacityError.classList.add("hidden");
+    els.capacityError.textContent = "";
+    els.capacityWindowCarts.textContent = formatNumber(result.peakRow.carts);
+    els.capacityWindowSqFt.textContent = formatNumber(result.peakRow.squareFeet);
+    els.capacityPeakSqFt.textContent = formatNumber(result.peakRow.squareFeet);
+    renderCapacityTable(result.rows);
+    drawCapacityChart(result.rows);
+  } catch (error) {
+    els.capacityError.classList.remove("hidden");
+    els.capacityError.textContent = error.message || "Unable to calculate final hold capacity.";
+    els.capacityWindowCarts.textContent = "Error";
+    els.capacityWindowSqFt.textContent = "Error";
+    els.capacityPeakSqFt.textContent = "Error";
+    els.capacityBody.innerHTML = "";
+    drawCapacityChart([]);
+  }
 }
 
 function showTab(tabName) {
@@ -1135,8 +1273,16 @@ function setViewMode(mode) {
   setTimeout(() => {
     drawCurve(calculate().hourlyRows, els.curveCanvas);
     drawCurve(calculate({ scenario: state.irrop }).hourlyRows, els.irropCanvas);
-    drawCapacityChart(calculateCapacityProjection().rows);
+    drawCurrentCapacityChart();
   }, 50);
+}
+
+function drawCurrentCapacityChart() {
+  try {
+    drawCapacityChart(calculateCapacityProjection().rows);
+  } catch {
+    drawCapacityChart([]);
+  }
 }
 
 function applyViewMode() {
@@ -1244,10 +1390,20 @@ function renderCapacityTable(rows) {
   els.capacityBody.innerHTML = rows
     .map((row) => `<tr>
       <td>${formatHourWithMinutes(row.time)}</td>
-      <td>${formatNumber(row.carts)}</td>
+      <td>${row.assemblyActive}</td>
+      <td>${formatNumber(row.originalDemand)}</td>
+      <td>${formatShiftedDemand(row)}</td>
+      <td>${formatNumber(row.adjustedBuild)}</td>
+      <td>${formatNumber(row.inventory)}</td>
       <td>${formatNumber(row.squareFeet)}</td>
     </tr>`)
     .join("");
+}
+
+function formatShiftedDemand(row) {
+  if (row.shiftedIn > 0) return `+${formatNumber(row.shiftedIn)} from offshift`;
+  if (row.shiftedOut > 0 && row.shiftedTo) return `${formatNumber(row.shiftedOut)} to ${formatShortHour(row.shiftedTo)}`;
+  return "-";
 }
 
 function renderGaps(missing) {
@@ -1412,6 +1568,11 @@ function syncCapacityControls() {
   els.holdTimeValue.textContent = label;
   els.capacityWindowLabel.textContent = `Average Hold Time: ${label}`;
   syncRangeFill(els.holdTimeSlider);
+  els.shiftInputs.forEach((input) => {
+    const index = Number(input.dataset.shiftIndex);
+    const field = input.dataset.shiftField;
+    if (state.assemblyShifts[index]) input.value = state.assemblyShifts[index][field] || "";
+  });
 }
 
 function normalizeIrropWindows(changedKey = "") {

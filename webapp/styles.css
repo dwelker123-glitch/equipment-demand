@@ -193,6 +193,7 @@ h2 {
 .control input[type="number"],
 .control input[type="date"],
 .control input[type="search"],
+.control input[type="time"],
 .control select {
   width: 100%;
   min-height: 38px;
@@ -433,6 +434,27 @@ h2 {
 
 .capacity-control {
   grid-column: span 2;
+}
+
+.shift-control {
+  min-width: 190px;
+}
+
+.time-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.capacity-error {
+  margin: 0 14px 14px;
+  padding: 11px 12px;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .summary-grid {
@@ -699,6 +721,10 @@ tbody tr:hover {
 
 .mobile-mode .capacity-control {
   grid-column: auto;
+}
+
+.mobile-mode .time-pair {
+  grid-template-columns: 1fr;
 }
 
 .mobile-mode .window-control {
