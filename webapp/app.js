@@ -7,9 +7,9 @@ const EQUIPMENT = [
   { key: "airbusCarriers", label: "CA767 Airbus Carriers", source: "Airbus Carriers", countLabel: "CA767" },
 ];
 
-const DEFAULT_SCHEDULE_PATH = "./data/Volare-6_WebSchedule.csv";
-const DEFAULT_SOURCE_NAME = "Volare-6 export";
-const DATA_VERSION = "final-hold-capacity-v1";
+const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
+const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
+const DATA_VERSION = "ua-june-2026-default-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -138,13 +138,13 @@ const els = {
 };
 
 async function boot() {
-  const [referenceText, scheduleText] = await Promise.all([
+  const [referenceText, scheduleRows] = await Promise.all([
     fetchText(versionedPath("./data/AircraftEquipmentReference.csv")),
-    fetchText(DEFAULT_SCHEDULE_PATH),
+    loadDefaultScheduleRows(),
   ]);
   state.referenceRows = loadStoredReferenceRows() || buildReferenceRows(parseCsv(referenceText));
   state.reference = buildReference(state.referenceRows);
-  state.schedule = normalizeSchedule(parseCsv(scheduleText));
+  state.schedule = normalizeSchedule(scheduleRows);
   state.cycleCounts = loadCycleCounts();
   state.viewMode = localStorage.getItem(VIEW_MODE_STORAGE_KEY) || "desktop";
   bindEvents();
@@ -161,6 +161,21 @@ async function fetchText(path) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`Unable to load ${path}`);
   return response.text();
+}
+
+async function fetchArrayBuffer(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Unable to load ${path}`);
+  return response.arrayBuffer();
+}
+
+async function loadDefaultScheduleRows() {
+  const extension = DEFAULT_SCHEDULE_PATH.split(".").pop().toLowerCase();
+  if (extension === "csv") return parseCsv(await fetchText(versionedPath(DEFAULT_SCHEDULE_PATH)));
+  if (!["xlsx", "xls"].includes(extension)) {
+    throw new Error("Default schedule must be a CSV, XLSX, or XLS file.");
+  }
+  return parseScheduleWorkbook(await fetchArrayBuffer(versionedPath(DEFAULT_SCHEDULE_PATH)));
 }
 
 function versionedPath(path) {
@@ -200,8 +215,7 @@ function bindEvents() {
   });
 
   els.resetButton.addEventListener("click", async () => {
-    const text = await fetchText(DEFAULT_SCHEDULE_PATH);
-    state.schedule = normalizeSchedule(parseCsv(text));
+    state.schedule = normalizeSchedule(await loadDefaultScheduleRows());
     state.sourceName = DEFAULT_SOURCE_NAME;
     state.station = "ORD";
     state.serviceDate = "";
@@ -390,7 +404,15 @@ async function parseScheduleFile(file) {
     throw new Error("Excel support could not load. Check your internet connection and try again.");
   }
 
-  const workbook = window.XLSX.read(await file.arrayBuffer(), {
+  return parseScheduleWorkbook(await file.arrayBuffer());
+}
+
+function parseScheduleWorkbook(arrayBuffer) {
+  if (!window.XLSX) {
+    throw new Error("Excel support could not load. Check your internet connection and try again.");
+  }
+
+  const workbook = window.XLSX.read(arrayBuffer, {
     type: "array",
     cellDates: true,
   });
