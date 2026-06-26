@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "ua-june-2026-default-v1";
+const DATA_VERSION = "ua-june-2026-rollover-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -906,7 +906,7 @@ function filteredSchedule() {
 }
 
 function isFlightInOperationalWindow(row, window) {
-  return [row.departure, row.arrival, row.stationTime].some((date) => date && isInOperationalWindow(date, window));
+  return rowOperationalTimes(row).some((date) => date && isInOperationalWindow(date, window));
 }
 
 function buildHourlyTimeline(events, window) {
@@ -933,6 +933,18 @@ function matchesSelectedStation(row) {
   if (state.station === "All") return true;
   if (row.hub) return row.hub === state.station;
   return row.origin === state.station || row.destination === state.station;
+}
+
+function rowOperationalTimes(row) {
+  const demandEventTime = row.departure || row.stationTime;
+  const supplyEventTime = row.arrival || (demandEventTime ? addHours(demandEventTime, -8) : null);
+  return [
+    row.departure,
+    row.arrival,
+    row.stationTime,
+    demandEventTime ? addHours(demandEventTime, -6) : null,
+    supplyEventTime ? addHours(supplyEventTime, 1) : null,
+  ].filter(Boolean);
 }
 
 function preferredStation() {
@@ -1313,7 +1325,7 @@ function availableOperationalDates() {
   state.schedule.forEach((row) => {
     const stationMatch = matchesSelectedStation(row);
     if (!stationMatch) return;
-    [row.departure, row.arrival, row.stationTime].forEach((date) => {
+    rowOperationalTimes(row).forEach((date) => {
       if (!date) return;
       dates.add(operationalDateKey(date));
     });
@@ -1327,9 +1339,10 @@ function busiestOperationalDate(dates) {
   state.schedule.forEach((row) => {
     const stationMatch = matchesSelectedStation(row);
     if (!stationMatch) return;
-    const key = operationalDateKey(row.departure || row.stationTime || row.arrival);
-    if (!allowed.has(key)) return;
-    counts.set(key, (counts.get(key) || 0) + 1);
+    const rowDates = new Set(rowOperationalTimes(row).map(operationalDateKey).filter((key) => allowed.has(key)));
+    rowDates.forEach((key) => {
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
   });
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || dates[0];
 }
