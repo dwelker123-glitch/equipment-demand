@@ -128,6 +128,7 @@ h2 {
 .summary-grid,
 .workspace,
 .irrop-layout,
+.capacity-layout,
 .equipment-view {
   max-width: 1720px;
   margin-inline: auto;
@@ -183,6 +184,10 @@ h2 {
   font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.control label span {
+  text-transform: none;
 }
 
 .control input[type="number"],
@@ -405,6 +410,11 @@ h2 {
   gap: 12px;
 }
 
+.capacity-layout {
+  display: grid;
+  gap: 12px;
+}
+
 .scenario-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
@@ -414,6 +424,15 @@ h2 {
 
 .irrop-summary {
   margin-top: 0;
+}
+
+.capacity-summary {
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 0;
+}
+
+.capacity-control {
+  grid-column: span 2;
 }
 
 .summary-grid {
@@ -525,6 +544,10 @@ h2 {
 
 .swatch.processing {
   background: #6f5bd6;
+}
+
+.swatch.capacity {
+  background: #0f766e;
 }
 
 .chart-panel canvas {
@@ -672,6 +695,10 @@ tbody tr:hover {
 .mobile-mode .workspace,
 .mobile-mode .split {
   grid-template-columns: 1fr;
+}
+
+.mobile-mode .capacity-control {
+  grid-column: auto;
 }
 
 .mobile-mode .window-control {

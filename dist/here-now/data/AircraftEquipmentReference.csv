@@ -1,79 +1,79 @@
-Aircraft Type,Full Carts,Half Carts,Carrier Boxes,Airbus Carts,Airbus Carriers,Notes
-E75,1,4,8,0,0,User supplied mapping.
-E7A,1,4,8,0,0,User supplied mapping.
-E7M,1,4,8,0,0,User supplied mapping.
-E7T,1,4,8,0,0,User supplied mapping.
-E7W,1,4,8,0,0,User supplied mapping.
-E7X,1,4,8,0,0,User supplied mapping.
-E7F,1,4,8,0,0,User supplied mapping.
-E7Q,1,4,8,0,0,User supplied mapping.
-E7R,1,4,8,0,0,User supplied mapping.
-C7G,0,3,3,0,0,User supplied mapping.
-CR7,0,3,3,0,0,User supplied mapping.
-CR5,0,3,3,0,0,User supplied mapping.
-C5G,0,3,3,0,0,User supplied mapping.
-19G,9,0,0,0,0,User supplied mapping.
-19S,9,0,0,0,0,User supplied mapping.
-19F,9,0,0,0,0,User supplied mapping.
-19C,9,0,0,0,0,User supplied mapping.
-20S,9,0,0,0,0,User supplied mapping.
-20C,9,0,0,0,0,User supplied mapping.
-319,9,0,0,0,0,Volare alias for A319 profile; confirm exact subtype.
-320,9,0,0,0,0,Volare alias for A320 profile; confirm exact subtype.
-21N,8,5,18,0,0,User supplied mapping.
-321,8,5,18,0,0,Volare alias for A321 profile; confirm exact subtype.
-73G,7,1,17,0,0,User supplied mapping.
-737,7,1,17,0,0,Volare alias for B737 profile; confirm exact subtype.
-73S,7,1,17,0,0,User supplied mapping.
-73U,6,1,17,0,0,User supplied mapping.
-73Q,6,1,17,0,0,User supplied mapping.
-73Y,6,1,17,0,0,User supplied mapping.
-739,6,1,17,0,0,Volare alias for B737-900 profile; confirm exact subtype.
-37X,7,1,11,0,0,User supplied mapping.
-7M8,7,1,11,0,0,Volare alias for B737 MAX profile; confirm exact subtype.
-37E,7,1,11,0,0,User supplied mapping.
-73C,7,1,11,0,0,User supplied mapping.
-37K,7,1,11,0,0,User supplied mapping.
-738,7,1,11,0,0,Volare alias for B737-800 profile; confirm exact subtype.
-7M9,7,1,11,0,0,Volare alias for B737 MAX profile; confirm exact subtype.
-75A,14,0,24,0,0,User supplied mapping.
-75E,13,0,19,0,0,User supplied mapping.
-752,13,0,19,0,0,Volare alias for B757-200 profile; confirm exact subtype.
-75B,13,0,23,0,0,User supplied mapping.
-75S,0,0,23,0,0,User supplied mapping.
-753,0,0,23,0,0,Volare alias for B757-300 profile; confirm exact subtype.
-76A,23,2,37,0,0,User supplied mapping.
-76C,23,2,37,0,0,User supplied mapping.
-763,23,2,37,0,0,Volare alias for B767-300 profile; confirm exact subtype.
-76L,25,6,59,0,0,User supplied mapping.
-76S,27,3,55,0,0,User supplied mapping.
-76P,27,3,55,0,0,User supplied mapping.
-77J,41,0,46,0,0,User supplied mapping.
-77Q,41,0,46,0,0,User supplied mapping.
-77Y,35,5,102,0,0,User supplied mapping.
-77K,35,5,102,0,0,User supplied mapping.
-77R,35,5,102,0,0,User supplied mapping.
-77N,35,5,102,0,0,User supplied mapping.
-77U,35,5,102,0,0,User supplied mapping.
-77E,35,5,102,0,0,User supplied mapping.
-777,35,5,102,0,0,Volare alias for B777 profile; confirm exact subtype.
-77W,45,9,132,0,0,User supplied mapping.
-77T,45,9,132,0,0,User supplied mapping.
-77X,45,9,132,0,0,User supplied mapping.
-77F,8,0,14,0,0,User supplied mapping.
-77G,35,0,39,0,0,User supplied mapping.
-77M,35,0,39,0,0,User supplied mapping.
-78Z,37,12,95,0,0,User supplied mapping.
-78V,36,4,67,0,0,User supplied mapping.
-78P,37,12,79,0,0,User supplied mapping.
-78J,38,4,86,0,0,User supplied mapping.
-78H,36,4,46,0,0,User supplied mapping.
-787,36,4,46,0,0,Volare alias for B787 profile; confirm exact subtype.
-788,36,4,46,0,0,Volare alias for B787-8 profile; confirm exact subtype.
-C2C,0,0,0,0,0,User supplied mapping.
-CRJ,0,3,3,0,0,User supplied mapping.
-CRZ,0,3,3,0,0,User supplied mapping.
-ER4,0,0,0,0,0,User supplied mapping.
-LRJ,0,0,0,0,0,User supplied mapping.
-XR4,0,0,0,0,0,User supplied mapping.
-XRJ,0,0,0,0,0,User supplied mapping.
+Aircraft Type,Full Carts,Half Carts,Beverage Carts,Carrier Boxes,Airbus Carts,Airbus Carriers,Notes
+E75,1,4,5,8,0,0,User supplied mapping.
+E7A,1,4,5,8,0,0,User supplied mapping.
+E7M,1,4,5,8,0,0,User supplied mapping.
+E7T,1,4,5,8,0,0,User supplied mapping.
+E7W,1,4,5,8,0,0,User supplied mapping.
+E7X,1,4,5,8,0,0,User supplied mapping.
+E7F,1,4,5,8,0,0,User supplied mapping.
+E7Q,1,4,5,8,0,0,User supplied mapping.
+E7R,1,4,5,8,0,0,User supplied mapping.
+C7G,0,3,3,3,0,0,User supplied mapping.
+CR7,0,3,3,3,0,0,User supplied mapping.
+CR5,0,3,3,3,0,0,User supplied mapping.
+C5G,0,3,3,3,0,0,User supplied mapping.
+19G,9,0,9,0,0,0,User supplied mapping.
+19S,9,0,9,0,0,0,User supplied mapping.
+19F,9,0,9,0,0,0,User supplied mapping.
+19C,9,0,9,0,0,0,User supplied mapping.
+20S,9,0,9,0,0,0,User supplied mapping.
+20C,9,0,9,0,0,0,User supplied mapping.
+319,9,0,9,0,0,0,Volare alias for A319 profile; confirm exact subtype.
+320,9,0,9,0,0,0,Volare alias for A320 profile; confirm exact subtype.
+21N,8,5,13,18,0,0,User supplied mapping.
+321,8,5,13,18,0,0,Volare alias for A321 profile; confirm exact subtype.
+73G,7,1,8,17,0,0,User supplied mapping.
+737,7,1,8,17,0,0,Volare alias for B737 profile; confirm exact subtype.
+73S,7,1,8,17,0,0,User supplied mapping.
+73U,6,1,7,17,0,0,User supplied mapping.
+73Q,6,1,7,17,0,0,User supplied mapping.
+73Y,6,1,7,17,0,0,User supplied mapping.
+739,6,1,7,17,0,0,Volare alias for B737-900 profile; confirm exact subtype.
+37X,7,1,8,11,0,0,User supplied mapping.
+7M8,7,1,8,11,0,0,Volare alias for B737 MAX profile; confirm exact subtype.
+37E,7,1,8,11,0,0,User supplied mapping.
+73C,7,1,8,11,0,0,User supplied mapping.
+37K,7,1,8,11,0,0,User supplied mapping.
+738,7,1,8,11,0,0,Volare alias for B737-800 profile; confirm exact subtype.
+7M9,7,1,8,11,0,0,Volare alias for B737 MAX profile; confirm exact subtype.
+75A,14,0,14,24,0,0,User supplied mapping.
+75E,13,0,13,19,0,0,User supplied mapping.
+752,13,0,13,19,0,0,Volare alias for B757-200 profile; confirm exact subtype.
+75B,13,0,13,23,0,0,User supplied mapping.
+75S,0,0,0,23,0,0,User supplied mapping.
+753,0,0,0,23,0,0,Volare alias for B757-300 profile; confirm exact subtype.
+76A,23,2,25,37,0,0,User supplied mapping.
+76C,23,2,25,37,0,0,User supplied mapping.
+763,23,2,25,37,0,0,Volare alias for B767-300 profile; confirm exact subtype.
+76L,25,6,31,59,0,0,User supplied mapping.
+76S,27,3,30,55,0,0,User supplied mapping.
+76P,27,3,30,55,0,0,User supplied mapping.
+77J,41,0,41,46,0,0,User supplied mapping.
+77Q,41,0,41,46,0,0,User supplied mapping.
+77Y,35,5,40,102,0,0,User supplied mapping.
+77K,35,5,40,102,0,0,User supplied mapping.
+77R,35,5,40,102,0,0,User supplied mapping.
+77N,35,5,40,102,0,0,User supplied mapping.
+77U,35,5,40,102,0,0,User supplied mapping.
+77E,35,5,40,102,0,0,User supplied mapping.
+777,35,5,40,102,0,0,Volare alias for B777 profile; confirm exact subtype.
+77W,45,9,54,132,0,0,User supplied mapping.
+77T,45,9,54,132,0,0,User supplied mapping.
+77X,45,9,54,132,0,0,User supplied mapping.
+77F,8,0,8,14,0,0,User supplied mapping.
+77G,35,0,35,39,0,0,User supplied mapping.
+77M,35,0,35,39,0,0,User supplied mapping.
+78Z,37,12,49,95,0,0,User supplied mapping.
+78V,36,4,40,67,0,0,User supplied mapping.
+78P,37,12,49,79,0,0,User supplied mapping.
+78J,38,4,42,86,0,0,User supplied mapping.
+78H,36,4,40,46,0,0,User supplied mapping.
+787,36,4,40,46,0,0,Volare alias for B787 profile; confirm exact subtype.
+788,36,4,40,46,0,0,Volare alias for B787-8 profile; confirm exact subtype.
+C2C,0,0,0,0,0,0,User supplied mapping.
+CRJ,0,3,3,3,0,0,User supplied mapping.
+CRZ,0,3,3,3,0,0,User supplied mapping.
+ER4,0,0,0,0,0,0,User supplied mapping.
+LRJ,0,0,0,0,0,0,User supplied mapping.
+XR4,0,0,0,0,0,0,User supplied mapping.
+XRJ,0,0,0,0,0,0,User supplied mapping.

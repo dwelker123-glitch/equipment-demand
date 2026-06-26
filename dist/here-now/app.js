@@ -1,6 +1,7 @@
 const EQUIPMENT = [
   { key: "fullCarts", label: "FC800G Full Carts", source: "Full Carts", countLabel: "FC800G" },
   { key: "halfCarts", label: "HC801G Half Carts", source: "Half Carts", countLabel: "HC801G" },
+  { key: "beverageCarts", label: "Beverage Carts", source: "Beverage Carts", countLabel: "Beverage Carts" },
   { key: "carrierBoxes", label: "CB806G Carrier Boxes", source: "Carrier Boxes", countLabel: "CB806G" },
   { key: "airbusCarts", label: "CA777 Airbus Full Carts", source: "Airbus Carts", countLabel: "CA777" },
   { key: "airbusCarriers", label: "CA767 Airbus Carriers", source: "Airbus Carriers", countLabel: "CA767" },
@@ -8,8 +9,8 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/Volare-6_WebSchedule.csv";
 const DEFAULT_SOURCE_NAME = "Volare-6 export";
-const DATA_VERSION = "mainline-mapping-v3";
-const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v3";
+const DATA_VERSION = "equipment-capacity-v1";
+const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v4";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
 const FULL_CART_WARNING_QTY = 500;
@@ -17,6 +18,7 @@ const FULL_CART_WARNING_HUBS = new Set(["ORD", "SFO"]);
 const FULL_CART_PROCESSING_CAPACITY_PER_HOUR = 200;
 const DEFAULT_CYCLE_COUNTS = {
   fullCarts: 1574,
+  beverageCarts: 0,
   carrierBoxes: 3130,
   halfCarts: 965,
   airbusCarts: 504,
@@ -33,6 +35,7 @@ const CHART_COLORS = {
   balance: "#7f1d2d",
   warning: "#f59e0b",
   processing: "#6f5bd6",
+  capacity: "#0f766e",
   panel: "#ffffff",
 };
 
@@ -54,6 +57,7 @@ const state = {
     departureDelay: 0,
     groundStop: false,
   },
+  holdTimeHours: 3,
   viewMode: "desktop",
   activeView: "planner",
   sourceName: DEFAULT_SOURCE_NAME,
@@ -65,9 +69,11 @@ const els = {
   mobileMode: document.querySelector("#mobileMode"),
   plannerTab: document.querySelector("#plannerTab"),
   irropTab: document.querySelector("#irropTab"),
+  capacityTab: document.querySelector("#capacityTab"),
   equipmentTab: document.querySelector("#equipmentTab"),
   plannerView: document.querySelector("#plannerView"),
   irropView: document.querySelector("#irropView"),
+  capacityView: document.querySelector("#capacityView"),
   equipmentView: document.querySelector("#equipmentView"),
   scheduleFile: document.querySelector("#scheduleFile"),
   resetButton: document.querySelector("#resetButton"),
@@ -121,6 +127,14 @@ const els = {
   irropHead: document.querySelector("#irropHead"),
   irropBody: document.querySelector("#irropBody"),
   downloadIrrop: document.querySelector("#downloadIrrop"),
+  holdTimeSlider: document.querySelector("#holdTimeSlider"),
+  holdTimeValue: document.querySelector("#holdTimeValue"),
+  capacityWindowLabel: document.querySelector("#capacityWindowLabel"),
+  capacityWindowCarts: document.querySelector("#capacityWindowCarts"),
+  capacityWindowSqFt: document.querySelector("#capacityWindowSqFt"),
+  capacityPeakSqFt: document.querySelector("#capacityPeakSqFt"),
+  capacityCanvas: document.querySelector("#capacityCanvas"),
+  capacityBody: document.querySelector("#capacityBody"),
 };
 
 async function boot() {
@@ -159,6 +173,7 @@ function bindEvents() {
 
   els.plannerTab.addEventListener("click", () => showTab("planner"));
   els.irropTab.addEventListener("click", () => showTab("irrop"));
+  els.capacityTab.addEventListener("click", () => showTab("capacity"));
   els.equipmentTab.addEventListener("click", () => showTab("equipment"));
 
   els.scheduleFile.addEventListener("change", async (event) => {
@@ -239,6 +254,12 @@ function bindEvents() {
     downloadCsv(calculate({ scenario: state.irrop }).hourlyRows, "irrop-demand-by-hour.csv");
   });
 
+  els.holdTimeSlider.addEventListener("input", () => {
+    activateRangeHandle(els.holdTimeSlider);
+    state.holdTimeHours = Number(els.holdTimeSlider.value);
+    renderCapacity();
+  });
+
   [
     ["irropArrivalStart", "arrivalStart"],
     ["irropArrivalEnd", "arrivalEnd"],
@@ -292,6 +313,7 @@ function bindEvents() {
       aircraftType: "",
       fullCarts: 0,
       halfCarts: 0,
+      beverageCarts: 0,
       carrierBoxes: 0,
       airbusCarts: 0,
       airbusCarriers: 0,
@@ -327,6 +349,7 @@ function bindEvents() {
     saveReferenceRows();
     rebuildReference();
     renderPlannerOnly();
+    renderCapacity();
   });
 
   els.referenceBody.addEventListener("change", (event) => {
@@ -349,6 +372,7 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     drawCurve(calculate().hourlyRows, els.curveCanvas);
     drawCurve(calculate({ scenario: state.irrop }).hourlyRows, els.irropCanvas);
+    drawCapacityChart(calculateCapacityProjection().rows);
   });
 }
 
@@ -514,15 +538,21 @@ function parseCsv(text) {
 
 function buildReferenceRows(rows) {
   return rows
-    .map((row) => ({
-      aircraftType: normalizeAircraft(row["Aircraft Type"]),
-      fullCarts: cleanNumber(row["Full Carts"]),
-      halfCarts: cleanNumber(row["Half Carts"]),
-      carrierBoxes: cleanNumber(row["Carrier Boxes"]),
-      airbusCarts: cleanNumber(row["Airbus Carts"]),
-      airbusCarriers: cleanNumber(row["Airbus Carriers"] || row["Dog Houses"]),
-      notes: row.Notes || "",
-    }))
+    .map((row) => {
+      const fullCarts = cleanNumber(row["Full Carts"]);
+      const halfCarts = cleanNumber(row["Half Carts"]);
+      const airbusCarts = cleanNumber(row["Airbus Carts"]);
+      return {
+        aircraftType: normalizeAircraft(row["Aircraft Type"]),
+        fullCarts,
+        halfCarts,
+        beverageCarts: hasValue(row["Beverage Carts"]) ? cleanNumber(row["Beverage Carts"]) : fullCarts + halfCarts + airbusCarts,
+        carrierBoxes: cleanNumber(row["Carrier Boxes"]),
+        airbusCarts,
+        airbusCarriers: cleanNumber(row["Airbus Carriers"] || row["Dog Houses"]),
+        notes: row.Notes || "",
+      };
+    })
     .filter((row) => row.aircraftType);
 }
 
@@ -542,6 +572,10 @@ function buildReference(rows) {
 
 function cleanNumber(value) {
   return Math.max(0, Number(value || 0));
+}
+
+function hasValue(value) {
+  return value != null && String(value).trim() !== "";
 }
 
 function loadCycleCounts() {
@@ -564,15 +598,21 @@ function loadStoredReferenceRows() {
     if (!raw) return null;
     const rows = JSON.parse(raw);
     if (!Array.isArray(rows)) return null;
-    return rows.map((row) => ({
-      aircraftType: normalizeAircraft(row.aircraftType),
-      fullCarts: cleanNumber(row.fullCarts),
-      halfCarts: cleanNumber(row.halfCarts),
-      carrierBoxes: cleanNumber(row.carrierBoxes),
-      airbusCarts: cleanNumber(row.airbusCarts),
-      airbusCarriers: cleanNumber(row.airbusCarriers || row.dogHouses),
-      notes: row.notes || "",
-    }));
+    return rows.map((row) => {
+      const fullCarts = cleanNumber(row.fullCarts);
+      const halfCarts = cleanNumber(row.halfCarts);
+      const airbusCarts = cleanNumber(row.airbusCarts);
+      return {
+        aircraftType: normalizeAircraft(row.aircraftType),
+        fullCarts,
+        halfCarts,
+        beverageCarts: hasValue(row.beverageCarts) ? cleanNumber(row.beverageCarts) : fullCarts + halfCarts + airbusCarts,
+        carrierBoxes: cleanNumber(row.carrierBoxes),
+        airbusCarts,
+        airbusCarriers: cleanNumber(row.airbusCarriers || row.dogHouses),
+        notes: row.notes || "",
+      };
+    });
   } catch {
     return null;
   }
@@ -779,6 +819,66 @@ function calculate(options = {}) {
   };
 }
 
+function calculateCapacityProjection() {
+  const baseRows = state.schedule.filter((row) => {
+    const stationMatch = matchesSelectedStation(row);
+    const cscMatch = state.csc === "All" || row.csc === state.csc;
+    return stationMatch && cscMatch;
+  });
+  const operationalWindow = getOperationalWindow(baseRows);
+  const rows = baseRows.filter((row) => isFlightInOperationalWindow(row, operationalWindow));
+  const demandEvents = [];
+
+  rows.forEach((flight) => {
+    const equipment = state.reference.get(flight.aircraft);
+    const cancelled = /cancel/i.test(flight.status);
+    const stationScoped = state.station !== "All";
+    const hubScoped = stationScoped && flight.hub;
+    const outboundCandidate = stationScoped ? (hubScoped ? flight.hub === state.station : flight.origin === state.station) : Boolean(flight.origin || flight.departure);
+    const demandEventTime = flight.departure || flight.stationTime;
+    if (!outboundCandidate || !equipment || !demandEventTime || cancelled) return;
+
+    // Final hold cooler projection follows the same production-release timing used by the demand timeline.
+    const releaseTime = addHours(demandEventTime, -6);
+    if (!isInOperationalWindow(releaseTime, operationalWindow)) return;
+    demandEvents.push({
+      time: releaseTime,
+      carts: Number(equipment.beverageCarts || 0),
+    });
+  });
+
+  const buckets = buildHalfHourBuckets(operationalWindow);
+  const holdTimeMs = state.holdTimeHours * 60 * 60 * 1000;
+  const projectionRows = buckets.map((bucket) => {
+    const windowEnd = new Date(bucket.getTime() + holdTimeMs);
+    const carts = demandEvents.reduce((sum, event) => (event.time >= bucket && event.time < windowEnd ? sum + event.carts : sum), 0);
+    return {
+      time: bucket,
+      carts,
+      squareFeet: carts * 3,
+    };
+  });
+
+  const peakRow = projectionRows.reduce((peak, row) => (row.squareFeet > peak.squareFeet ? row : peak), {
+    time: null,
+    carts: 0,
+    squareFeet: 0,
+  });
+
+  return {
+    rows: projectionRows,
+    peakRow,
+  };
+}
+
+function buildHalfHourBuckets(window) {
+  const buckets = [];
+  for (let time = new Date(window.start); time < window.end; time = addHours(time, 0.5)) {
+    buckets.push(new Date(time));
+  }
+  return buckets;
+}
+
 function filteredSchedule() {
   const stationRows = state.schedule.filter((row) => {
     const stationMatch = matchesSelectedStation(row);
@@ -936,6 +1036,7 @@ function moveToWindowEnd(date, endHour) {
 function render() {
   renderPlannerOnly();
   renderIrrop();
+  renderCapacity();
   renderReferenceTable();
 }
 
@@ -970,18 +1071,32 @@ function renderIrrop() {
   drawCurve(result.hourlyRows, els.irropCanvas);
 }
 
+function renderCapacity() {
+  const result = calculateCapacityProjection();
+  syncCapacityControls();
+  els.capacityWindowCarts.textContent = formatNumber(result.peakRow.carts);
+  els.capacityWindowSqFt.textContent = formatNumber(result.peakRow.squareFeet);
+  els.capacityPeakSqFt.textContent = formatNumber(result.peakRow.squareFeet);
+  renderCapacityTable(result.rows);
+  drawCapacityChart(result.rows);
+}
+
 function showTab(tabName) {
   state.activeView = tabName;
   const equipmentActive = tabName === "equipment";
   const irropActive = tabName === "irrop";
+  const capacityActive = tabName === "capacity";
   els.equipmentView.classList.toggle("hidden", !equipmentActive);
   els.irropView.classList.toggle("hidden", !irropActive);
-  els.plannerView.classList.toggle("hidden", equipmentActive || irropActive);
+  els.capacityView.classList.toggle("hidden", !capacityActive);
+  els.plannerView.classList.toggle("hidden", equipmentActive || irropActive || capacityActive);
   els.equipmentTab.classList.toggle("active", equipmentActive);
   els.irropTab.classList.toggle("active", irropActive);
-  els.plannerTab.classList.toggle("active", !equipmentActive && !irropActive);
+  els.capacityTab.classList.toggle("active", capacityActive);
+  els.plannerTab.classList.toggle("active", !equipmentActive && !irropActive && !capacityActive);
   if (equipmentActive) renderReferenceTable();
   else if (irropActive) renderIrrop();
+  else if (capacityActive) renderCapacity();
   else drawCurve(calculate().hourlyRows, els.curveCanvas);
 }
 
@@ -992,6 +1107,7 @@ function setViewMode(mode) {
   setTimeout(() => {
     drawCurve(calculate().hourlyRows, els.curveCanvas);
     drawCurve(calculate({ scenario: state.irrop }).hourlyRows, els.irropCanvas);
+    drawCapacityChart(calculateCapacityProjection().rows);
   }, 50);
 }
 
@@ -1096,6 +1212,16 @@ function renderScenarioTable(rows) {
     .join("");
 }
 
+function renderCapacityTable(rows) {
+  els.capacityBody.innerHTML = rows
+    .map((row) => `<tr>
+      <td>${formatHourWithMinutes(row.time)}</td>
+      <td>${formatNumber(row.carts)}</td>
+      <td>${formatNumber(row.squareFeet)}</td>
+    </tr>`)
+    .join("");
+}
+
 function renderGaps(missing) {
   const gaps = Array.from(missing.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   els.gapCount.textContent = `${formatNumber(gaps.length)} types`;
@@ -1119,6 +1245,7 @@ function renderReferenceTable() {
       <td><input data-index="${index}" data-field="aircraftType" type="text" value="${escapeHtml(row.aircraftType)}" /></td>
       <td><input data-index="${index}" data-field="fullCarts" type="number" min="0" step="1" value="${row.fullCarts}" /></td>
       <td><input data-index="${index}" data-field="halfCarts" type="number" min="0" step="1" value="${row.halfCarts}" /></td>
+      <td><input data-index="${index}" data-field="beverageCarts" type="number" min="0" step="1" value="${row.beverageCarts}" /></td>
       <td><input data-index="${index}" data-field="carrierBoxes" type="number" min="0" step="1" value="${row.carrierBoxes}" /></td>
       <td><input data-index="${index}" data-field="airbusCarts" type="number" min="0" step="1" value="${row.airbusCarts}" /></td>
       <td><input data-index="${index}" data-field="airbusCarriers" type="number" min="0" step="1" value="${row.airbusCarriers}" /></td>
@@ -1250,6 +1377,14 @@ function syncIrropControls() {
   syncRangeFill(els.irropDepartureDelay);
 }
 
+function syncCapacityControls() {
+  els.holdTimeSlider.value = state.holdTimeHours;
+  const label = `${formatHourAmount(state.holdTimeHours)} ${state.holdTimeHours === 1 ? "hour" : "hours"}`;
+  els.holdTimeValue.textContent = label;
+  els.capacityWindowLabel.textContent = `Average Hold Time: ${label}`;
+  syncRangeFill(els.holdTimeSlider);
+}
+
 function normalizeIrropWindows(changedKey = "") {
   enforceWindowOrder("arrivalStart", "arrivalEnd", changedKey);
   enforceWindowOrder("departureStart", "departureEnd", changedKey);
@@ -1339,6 +1474,62 @@ function drawCurve(rows, canvas = els.curveCanvas) {
   if (processingActive) {
     drawLine(ctx, rows.map((row, index) => [x(index), y(row.processingBacklog)]), CHART_COLORS.processing, 2);
   }
+
+  ctx.fillStyle = CHART_COLORS.ink;
+  ctx.font = "12px Inter, system-ui, sans-serif";
+  const tickStep = Math.max(1, Math.ceil(rows.length / 8));
+  rows.forEach((row, index) => {
+    if (index % tickStep !== 0 && index !== rows.length - 1) return;
+    const label = formatShortHour(row.time);
+    ctx.save();
+    ctx.translate(x(index), height - 16);
+    ctx.rotate(-Math.PI / 8);
+    ctx.textAlign = "right";
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  });
+}
+
+function drawCapacityChart(rows) {
+  const canvas = els.capacityCanvas;
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.max(700, Math.floor(rect.width * ratio));
+  canvas.height = Math.max(300, Math.floor(rect.height * ratio));
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const width = canvas.width / ratio;
+  const height = canvas.height / ratio;
+  ctx.clearRect(0, 0, width, height);
+
+  const pad = { top: 24, right: 28, bottom: 52, left: 64 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const maxY = Math.max(10, ...rows.map((row) => row.squareFeet));
+
+  ctx.fillStyle = CHART_COLORS.panel;
+  ctx.fillRect(0, 0, width, height);
+  drawGrid(ctx, pad, plotW, plotH, maxY);
+
+  if (!rows.length) {
+    ctx.fillStyle = CHART_COLORS.muted;
+    ctx.font = "14px Inter, system-ui, sans-serif";
+    ctx.fillText("No eligible beverage-cart demand for the current filters.", pad.left, pad.top + 32);
+    return;
+  }
+
+  const x = (index) => pad.left + (rows.length === 1 ? plotW / 2 : (index / (rows.length - 1)) * plotW);
+  const y = (value) => pad.top + plotH - (value / maxY) * plotH;
+  drawLine(ctx, rows.map((row, index) => [x(index), y(row.squareFeet)]), CHART_COLORS.capacity, 3);
+
+  ctx.fillStyle = CHART_COLORS.capacity;
+  rows.forEach((row, index) => {
+    if (row.squareFeet <= 0) return;
+    ctx.beginPath();
+    ctx.arc(x(index), y(row.squareFeet), 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 
   ctx.fillStyle = CHART_COLORS.ink;
   ctx.font = "12px Inter, system-ui, sans-serif";
@@ -1470,11 +1661,7 @@ function downloadReferenceCsv() {
       .map((row) =>
         [
           row.aircraftType,
-          row.fullCarts,
-          row.halfCarts,
-          row.carrierBoxes,
-          row.airbusCarts,
-          row.airbusCarriers,
+          ...EQUIPMENT.map((item) => row[item.key]),
           row.notes || "",
         ]
           .map(csvValue)
@@ -1515,6 +1702,15 @@ function formatHour(date) {
 
 function formatShortHour(date) {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric" }).format(date);
+}
+
+function formatHourWithMinutes(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function formatHourOfDay(hour) {

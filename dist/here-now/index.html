@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Equipment Demand Planner</title>
     <link rel="icon" type="image/svg+xml" href="./assets/skychefs-logo-pride-red.svg?v=skychefs-icon-v1" />
-    <link rel="stylesheet" href="./styles.css?v=processing-capacity-v6" />
+    <link rel="stylesheet" href="./styles.css?v=equipment-capacity-v1" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -31,6 +31,7 @@
       <nav class="tabs" aria-label="Planner tabs">
         <button id="plannerTab" class="tab active" type="button">Demand</button>
         <button id="irropTab" class="tab" type="button">IRROP Planner</button>
+        <button id="capacityTab" class="tab" type="button">Equipment Capacity Projection</button>
         <button id="equipmentTab" class="tab" type="button">Aircraft Equipment</button>
       </nav>
 
@@ -259,6 +260,66 @@
         </section>
       </section>
 
+      <section id="capacityView" class="hidden">
+        <section class="capacity-layout">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Final Hold Cooler Projection</h2>
+              <span id="capacityWindowLabel">Average Hold Time: 3 hours</span>
+            </div>
+            <div class="scenario-grid">
+              <div class="control capacity-control">
+                <label for="holdTimeSlider">Average Hold Time <span id="holdTimeValue">3 hours</span></label>
+                <input id="holdTimeSlider" type="range" min="0.5" max="6" step="0.5" value="3" />
+              </div>
+            </div>
+          </section>
+
+          <section class="summary-grid capacity-summary" aria-label="Capacity summary">
+            <article class="metric">
+              <span>Total beverage carts in selected window</span>
+              <strong id="capacityWindowCarts">0</strong>
+            </article>
+            <article class="metric">
+              <span>Required final hold cooler sq ft</span>
+              <strong id="capacityWindowSqFt">0</strong>
+            </article>
+            <article class="metric">
+              <span>Peak sq ft requirement for the day</span>
+              <strong id="capacityPeakSqFt">0</strong>
+            </article>
+          </section>
+
+          <section class="panel chart-panel">
+            <div class="panel-head">
+              <h2>Cooler Sq Ft by Time</h2>
+              <div class="legend">
+                <span><i class="swatch capacity"></i>Required sq ft</span>
+              </div>
+            </div>
+            <canvas id="capacityCanvas" width="1200" height="430" aria-label="Final hold cooler square footage projection"></canvas>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Projection by Time Bucket</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Beverage carts in hold window</th>
+                    <th>Required sq ft</th>
+                  </tr>
+                </thead>
+                <tbody id="capacityBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+
       <section id="equipmentView" class="equipment-view hidden">
         <section class="panel">
           <div class="panel-head">
@@ -285,6 +346,7 @@
                   <th>Aircraft Type</th>
                   <th>Full Carts</th>
                   <th>Half Carts</th>
+                  <th>Beverage Carts</th>
                   <th>Carrier Boxes</th>
                   <th>Airbus Carts</th>
                   <th>Airbus Carriers</th>
@@ -298,6 +360,6 @@
         </section>
       </section>
     </main>
-    <script src="./app.js?v=processing-capacity-v6"></script>
+    <script src="./app.js?v=equipment-capacity-v1"></script>
   </body>
 </html>
