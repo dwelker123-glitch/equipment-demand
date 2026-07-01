@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "assembly-shift-roll-forward-v1";
+const DATA_VERSION = "assembly-shift-running-balance-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -900,23 +900,27 @@ function calculateCapacityProjection() {
   });
 
   const buckets = buildHourlyBuckets(operationalWindow);
-  const demandByHour = new Map();
-  const trailingOffshiftDemand = new Map();
+  const consumptionByHour = new Map();
+  const buildDemandByHour = new Map();
   demandEvents.forEach((event) => {
-    const bucket = hourBucket(event.time);
-    const key = bucket.toISOString();
-    const target = bucket < operationalWindow.end ? demandByHour : trailingOffshiftDemand;
-    target.set(key, (target.get(key) || 0) + event.carts);
+    const consumptionBucket = hourBucket(event.time);
+    if (consumptionBucket >= operationalWindow.start && consumptionBucket < operationalWindow.end) {
+      const consumptionKey = consumptionBucket.toISOString();
+      consumptionByHour.set(consumptionKey, (consumptionByHour.get(consumptionKey) || 0) + event.carts);
+    }
+
+    // Build demand is created ahead of consumption by the selected hold time.
+    // Shift validation/reassignment below decides whether that build can happen in its scheduled hour.
+    const buildBucket = hourBucket(addHours(event.time, -state.holdTimeHours));
+    const buildKey = buildBucket.toISOString();
+    buildDemandByHour.set(buildKey, (buildDemandByHour.get(buildKey) || 0) + event.carts);
   });
 
   const projectionRows = buckets.map((bucket) => ({
     time: bucket,
     assemblyActive: isAssemblyActive(bucket, assemblyShifts) ? 1 : 0,
-    originalDemand: demandByHour.get(bucket.toISOString()) || 0,
-    baseHoldInventory: demandEvents.reduce((sum, event) => {
-      const windowEnd = addHours(bucket, state.holdTimeHours);
-      return event.time >= bucket && event.time < windowEnd ? sum + event.carts : sum;
-    }, 0),
+    originalDemand: consumptionByHour.get(bucket.toISOString()) || 0,
+    scheduledBuild: buildDemandByHour.get(bucket.toISOString()) || 0,
     shiftedIn: 0,
     shiftedOut: 0,
     shiftedTo: null,
@@ -930,41 +934,50 @@ function calculateCapacityProjection() {
   let startingShiftInventory = 0;
   const hasActiveHour = projectionRows.some((row) => row.assemblyActive);
   projectionRows.forEach((row, index) => {
+    const buildDemand = row.scheduledBuild;
     if (row.assemblyActive) {
       priorActiveIndex = index;
       return;
     }
-    if (row.originalDemand <= 0) return;
+    if (buildDemand <= 0) return;
     if (priorActiveIndex < 0) {
       if (!hasActiveHour) {
         throw new Error(`Unresolved offshift demand at ${formatHourWithMinutes(row.time)}: no active assembly shift hour exists in the selected 24-hour cycle.`);
       }
-      startingShiftInventory += row.originalDemand;
-      row.shiftedOut = row.originalDemand;
+      startingShiftInventory += buildDemand;
+      row.shiftedOut = buildDemand;
       row.shiftedTo = "prior active shift";
       return;
     }
-    projectionRows[priorActiveIndex].shiftedIn += row.originalDemand;
-    row.shiftedOut = row.originalDemand;
+    projectionRows[priorActiveIndex].shiftedIn += buildDemand;
+    row.shiftedOut = buildDemand;
     row.shiftedTo = projectionRows[priorActiveIndex].time;
   });
 
-  const trailingDemand = Array.from(trailingOffshiftDemand.values()).reduce((sum, value) => sum + value, 0);
-  if (trailingDemand > 0) {
+  buildDemandByHour.forEach((buildDemand, key) => {
+    const buildTime = new Date(key);
+    if (buildTime >= operationalWindow.start && buildTime < operationalWindow.end) return;
+    if (buildDemand <= 0) return;
+    if (buildTime < operationalWindow.start) {
+      startingShiftInventory += buildDemand;
+      return;
+    }
     const finalActiveIndex = findFinalActiveIndex(projectionRows);
     if (finalActiveIndex < 0) {
       throw new Error(`Unresolved offshift demand after ${formatHourWithMinutes(operationalWindow.end)}: no prior active assembly shift hour exists in the selected 24-hour cycle.`);
     }
-    projectionRows[finalActiveIndex].shiftedIn += trailingDemand;
-  }
+    projectionRows[finalActiveIndex].shiftedIn += buildDemand;
+  });
 
   let inventory = startingShiftInventory;
   projectionRows.forEach((row) => {
-    row.adjustedBuild = row.assemblyActive ? row.originalDemand + row.shiftedIn : 0;
+    row.adjustedBuild = row.assemblyActive ? row.scheduledBuild + row.shiftedIn : 0;
     const inventoryBeforeDemand = inventory + row.adjustedBuild;
     inventory = inventoryBeforeDemand - row.originalDemand;
     row.shiftInventory = inventoryBeforeDemand;
-    row.inventory = Math.max(row.baseHoldInventory, row.shiftInventory);
+    // Final hold capacity follows the physical build/consume balance:
+    // active assembly hours can add carts, offshift hours can only draw inventory down.
+    row.inventory = row.shiftInventory;
     row.squareFeet = row.inventory * 3;
   });
 
