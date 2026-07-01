@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "assembly-shift-even-build-v1";
+const DATA_VERSION = "assembly-shift-pull-time-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -890,8 +890,8 @@ function calculateCapacityProjection() {
     const demandEventTime = flight.departure || flight.stationTime;
     if (!outboundCandidate || !equipment || !demandEventTime || cancelled) return;
 
-    // Final hold cooler projection follows the same production-release timing used by the demand timeline.
-    const releaseTime = addHours(demandEventTime, -6);
+    // The slider represents when transportation pulls carts from final hold before departure.
+    const releaseTime = addHours(demandEventTime, -state.holdTimeHours);
     if (releaseTime < operationalWindow.start || releaseTime >= capacityDemandEnd) return;
     demandEvents.push({
       time: releaseTime,
@@ -1593,7 +1593,7 @@ function syncCapacityControls() {
   els.holdTimeSlider.value = state.holdTimeHours;
   const label = `${formatHourAmount(state.holdTimeHours)} ${state.holdTimeHours === 1 ? "hour" : "hours"}`;
   els.holdTimeValue.textContent = label;
-  els.capacityWindowLabel.textContent = `Average Hold Time: ${label}`;
+  els.capacityWindowLabel.textContent = `Average Pull Time: ${label}`;
   syncRangeFill(els.holdTimeSlider);
   els.shiftInputs.forEach((input) => {
     const index = Number(input.dataset.shiftIndex);
@@ -1950,7 +1950,7 @@ function formatHourOfDay(hour) {
 }
 
 function formatHourAmount(value) {
-  return Number(value).toFixed(1).replace(/\.0$/, "");
+  return Number(value).toFixed(2).replace(/\.00$/, "").replace(/0$/, "");
 }
 
 function escapeHtml(value) {

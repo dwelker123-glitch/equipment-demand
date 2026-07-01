@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Equipment Demand Planner</title>
     <link rel="icon" type="image/svg+xml" href="./assets/skychefs-logo-pride-red.svg?v=skychefs-icon-v1" />
-    <link rel="stylesheet" href="./styles.css?v=assembly-shift-even-build-v1" />
+    <link rel="stylesheet" href="./styles.css?v=assembly-shift-pull-time-v1" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -265,12 +265,12 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Final Hold Cooler Projection</h2>
-              <span id="capacityWindowLabel">Average Hold Time: 3 hours</span>
+              <span id="capacityWindowLabel">Average Pull Time: 3 hours</span>
             </div>
             <div class="capacity-control-grid">
               <div class="control capacity-control">
-                <label for="holdTimeSlider">Average Hold Time <span id="holdTimeValue">3 hours</span></label>
-                <input id="holdTimeSlider" type="range" min="0.5" max="6" step="0.5" value="3" />
+                <label for="holdTimeSlider">Average Pull Time <span id="holdTimeValue">3 hours</span></label>
+                <input id="holdTimeSlider" type="range" min="0.5" max="6" step="0.25" value="3" />
               </div>
               <div class="shift-stack" aria-label="Assembly shifts">
                 <div class="control shift-control">
@@ -397,6 +397,6 @@
         </section>
       </section>
     </main>
-    <script src="./app.js?v=assembly-shift-even-build-v1"></script>
+    <script src="./app.js?v=assembly-shift-pull-time-v1"></script>
   </body>
 </html>
