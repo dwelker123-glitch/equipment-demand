@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "assembly-shift-dropdown-v1";
+const DATA_VERSION = "assembly-shift-roll-forward-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -878,10 +878,10 @@ function calculateCapacityProjection() {
     return stationMatch && cscMatch;
   });
   const operationalWindow = getOperationalWindow(baseRows);
-  const rows = baseRows.filter((row) => isFlightInOperationalWindow(row, operationalWindow));
   const demandEvents = [];
+  const capacityDemandEnd = getCapacityDemandEnd(operationalWindow, assemblyShifts);
 
-  rows.forEach((flight) => {
+  baseRows.forEach((flight) => {
     const equipment = state.reference.get(flight.aircraft);
     const cancelled = /cancel/i.test(flight.status);
     const stationScoped = state.station !== "All";
@@ -892,7 +892,7 @@ function calculateCapacityProjection() {
 
     // Final hold cooler projection follows the same production-release timing used by the demand timeline.
     const releaseTime = addHours(demandEventTime, -6);
-    if (!isInOperationalWindow(releaseTime, operationalWindow)) return;
+    if (releaseTime < operationalWindow.start || releaseTime >= capacityDemandEnd) return;
     demandEvents.push({
       time: releaseTime,
       carts: Number(equipment.beverageCarts || 0),
@@ -901,10 +901,12 @@ function calculateCapacityProjection() {
 
   const buckets = buildHourlyBuckets(operationalWindow);
   const demandByHour = new Map();
+  const trailingOffshiftDemand = new Map();
   demandEvents.forEach((event) => {
     const bucket = hourBucket(event.time);
     const key = bucket.toISOString();
-    demandByHour.set(key, (demandByHour.get(key) || 0) + event.carts);
+    const target = bucket < operationalWindow.end ? demandByHour : trailingOffshiftDemand;
+    target.set(key, (target.get(key) || 0) + event.carts);
   });
 
   const projectionRows = buckets.map((bucket) => ({
@@ -947,6 +949,15 @@ function calculateCapacityProjection() {
     row.shiftedTo = projectionRows[priorActiveIndex].time;
   });
 
+  const trailingDemand = Array.from(trailingOffshiftDemand.values()).reduce((sum, value) => sum + value, 0);
+  if (trailingDemand > 0) {
+    const finalActiveIndex = findFinalActiveIndex(projectionRows);
+    if (finalActiveIndex < 0) {
+      throw new Error(`Unresolved offshift demand after ${formatHourWithMinutes(operationalWindow.end)}: no prior active assembly shift hour exists in the selected 24-hour cycle.`);
+    }
+    projectionRows[finalActiveIndex].shiftedIn += trailingDemand;
+  }
+
   let inventory = startingShiftInventory;
   projectionRows.forEach((row) => {
     row.adjustedBuild = row.assemblyActive ? row.originalDemand + row.shiftedIn : 0;
@@ -977,6 +988,22 @@ function buildHourlyBuckets(window) {
     buckets.push(new Date(time));
   }
   return buckets;
+}
+
+function getCapacityDemandEnd(window, shifts) {
+  if (isAssemblyActive(window.end, shifts)) return window.end;
+  for (let hours = 1; hours <= 24; hours += 1) {
+    const candidate = addHours(window.end, hours);
+    if (isAssemblyActive(candidate, shifts)) return candidate;
+  }
+  return window.end;
+}
+
+function findFinalActiveIndex(rows) {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (rows[index].assemblyActive) return index;
+  }
+  return -1;
 }
 
 function validateAssemblyShifts() {
