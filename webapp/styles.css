@@ -416,6 +416,14 @@ h2 {
   gap: 12px;
 }
 
+.capacity-control-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(360px, 0.48fr);
+  gap: 18px;
+  align-items: start;
+  padding: 14px;
+}
+
 .scenario-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
@@ -433,11 +441,34 @@ h2 {
 }
 
 .capacity-control {
-  grid-column: span 2;
+  min-width: 0;
+}
+
+.shift-stack {
+  display: grid;
+  gap: 10px;
 }
 
 .shift-control {
-  min-width: 190px;
+  min-width: 0;
+}
+
+.shift-toggle {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  width: fit-content;
+}
+
+.shift-toggle input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+
+.shift-toggle span {
+  text-transform: uppercase;
 }
 
 .time-pair {
@@ -721,6 +752,11 @@ tbody tr:hover {
 
 .mobile-mode .capacity-control {
   grid-column: auto;
+}
+
+.mobile-mode .capacity-control-grid {
+  grid-template-columns: 1fr;
+  gap: 14px;
 }
 
 .mobile-mode .time-pair {

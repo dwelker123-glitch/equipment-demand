@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "assembly-shift-capacity-v1";
+const DATA_VERSION = "assembly-shift-toggle-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -59,9 +59,9 @@ const state = {
   },
   holdTimeHours: 3,
   assemblyShifts: [
-    { start: "06:00", end: "14:00" },
-    { start: "14:00", end: "22:00" },
-    { start: "22:00", end: "06:00" },
+    { active: true, start: "06:00", end: "14:00" },
+    { active: true, start: "14:00", end: "22:00" },
+    { active: true, start: "22:00", end: "06:00" },
   ],
   viewMode: "desktop",
   activeView: "planner",
@@ -282,14 +282,18 @@ function bindEvents() {
   });
 
   els.shiftInputs.forEach((input) => {
-    input.addEventListener("input", () => {
-      const index = Number(input.dataset.shiftIndex);
-      const field = input.dataset.shiftField;
-      if (!Number.isInteger(index) || !field) return;
-      state.assemblyShifts[index][field] = input.value;
-      renderCapacity();
-    });
+    input.addEventListener("input", handleShiftInput);
+    input.addEventListener("change", handleShiftInput);
   });
+
+  function handleShiftInput(event) {
+    const input = event.target;
+    const index = Number(input.dataset.shiftIndex);
+    const field = input.dataset.shiftField;
+    if (!Number.isInteger(index) || !field) return;
+    state.assemblyShifts[index][field] = field === "active" ? input.checked : input.value;
+    renderCapacity();
+  }
 
   [
     ["irropArrivalStart", "arrivalStart"],
@@ -907,6 +911,8 @@ function calculateCapacityProjection() {
   }));
 
   let priorActiveIndex = -1;
+  let startingShiftInventory = 0;
+  const hasActiveHour = projectionRows.some((row) => row.assemblyActive);
   projectionRows.forEach((row, index) => {
     if (row.assemblyActive) {
       priorActiveIndex = index;
@@ -914,18 +920,25 @@ function calculateCapacityProjection() {
     }
     if (row.originalDemand <= 0) return;
     if (priorActiveIndex < 0) {
-      throw new Error(`Unresolved offshift demand at ${formatHourWithMinutes(row.time)}: no prior active assembly shift hour exists in the selected 24-hour cycle.`);
+      if (!hasActiveHour) {
+        throw new Error(`Unresolved offshift demand at ${formatHourWithMinutes(row.time)}: no active assembly shift hour exists in the selected 24-hour cycle.`);
+      }
+      startingShiftInventory += row.originalDemand;
+      row.shiftedOut = row.originalDemand;
+      row.shiftedTo = "prior active shift";
+      return;
     }
     projectionRows[priorActiveIndex].shiftedIn += row.originalDemand;
     row.shiftedOut = row.originalDemand;
     row.shiftedTo = projectionRows[priorActiveIndex].time;
   });
 
-  let inventory = 0;
+  let inventory = startingShiftInventory;
   projectionRows.forEach((row) => {
     row.adjustedBuild = row.assemblyActive ? row.originalDemand + row.shiftedIn : 0;
-    inventory += row.adjustedBuild - row.originalDemand;
-    row.shiftInventory = inventory;
+    const inventoryBeforeDemand = inventory + row.adjustedBuild;
+    inventory = inventoryBeforeDemand - row.originalDemand;
+    row.shiftInventory = inventoryBeforeDemand;
     row.inventory = Math.max(row.baseHoldInventory, row.shiftInventory);
     row.squareFeet = row.inventory * 3;
   });
@@ -955,7 +968,7 @@ function buildHourlyBuckets(window) {
 function validateAssemblyShifts() {
   const shifts = state.assemblyShifts
     .map((shift, index) => ({ ...shift, index }))
-    .filter((shift) => shift.start || shift.end);
+    .filter((shift) => shift.active);
 
   if (!shifts.length) {
     throw new Error("Assembly shift setup is missing: define at least one shift start and end time.");
@@ -1402,7 +1415,8 @@ function renderCapacityTable(rows) {
 
 function formatShiftedDemand(row) {
   if (row.shiftedIn > 0) return `+${formatNumber(row.shiftedIn)} from offshift`;
-  if (row.shiftedOut > 0 && row.shiftedTo) return `${formatNumber(row.shiftedOut)} to ${formatShortHour(row.shiftedTo)}`;
+  if (row.shiftedOut > 0 && row.shiftedTo instanceof Date) return `${formatNumber(row.shiftedOut)} to ${formatShortHour(row.shiftedTo)}`;
+  if (row.shiftedOut > 0 && row.shiftedTo) return `${formatNumber(row.shiftedOut)} to ${escapeHtml(row.shiftedTo)}`;
   return "-";
 }
 
@@ -1571,7 +1585,13 @@ function syncCapacityControls() {
   els.shiftInputs.forEach((input) => {
     const index = Number(input.dataset.shiftIndex);
     const field = input.dataset.shiftField;
-    if (state.assemblyShifts[index]) input.value = state.assemblyShifts[index][field] || "";
+    const shift = state.assemblyShifts[index];
+    if (!shift) return;
+    if (field === "active") {
+      input.checked = Boolean(shift.active);
+    } else {
+      input.value = shift[field] || "";
+    }
   });
 }
 

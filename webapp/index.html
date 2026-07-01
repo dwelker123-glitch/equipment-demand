@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Equipment Demand Planner</title>
     <link rel="icon" type="image/svg+xml" href="./assets/skychefs-logo-pride-red.svg?v=skychefs-icon-v1" />
-    <link rel="stylesheet" href="./styles.css?v=assembly-shift-capacity-v1" />
+    <link rel="stylesheet" href="./styles.css?v=assembly-shift-toggle-v1" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -267,30 +267,41 @@
               <h2>Final Hold Cooler Projection</h2>
               <span id="capacityWindowLabel">Average Hold Time: 3 hours</span>
             </div>
-            <div class="scenario-grid">
+            <div class="capacity-control-grid">
               <div class="control capacity-control">
                 <label for="holdTimeSlider">Average Hold Time <span id="holdTimeValue">3 hours</span></label>
                 <input id="holdTimeSlider" type="range" min="0.5" max="6" step="0.5" value="3" />
               </div>
-              <div class="control shift-control">
-                <label for="shift1Start">Shift 1</label>
-                <div class="time-pair">
-                  <input id="shift1Start" data-shift-index="0" data-shift-field="start" type="time" value="06:00" />
-                  <input id="shift1End" data-shift-index="0" data-shift-field="end" type="time" value="14:00" />
+              <div class="shift-stack" aria-label="Assembly shifts">
+                <div class="control shift-control">
+                  <label class="shift-toggle" for="shift1Active">
+                    <input id="shift1Active" data-shift-index="0" data-shift-field="active" type="checkbox" checked />
+                    <span>Shift 1</span>
+                  </label>
+                  <div class="time-pair">
+                    <input id="shift1Start" data-shift-index="0" data-shift-field="start" type="time" value="06:00" />
+                    <input id="shift1End" data-shift-index="0" data-shift-field="end" type="time" value="14:00" />
+                  </div>
                 </div>
-              </div>
-              <div class="control shift-control">
-                <label for="shift2Start">Shift 2</label>
-                <div class="time-pair">
-                  <input id="shift2Start" data-shift-index="1" data-shift-field="start" type="time" value="14:00" />
-                  <input id="shift2End" data-shift-index="1" data-shift-field="end" type="time" value="22:00" />
+                <div class="control shift-control">
+                  <label class="shift-toggle" for="shift2Active">
+                    <input id="shift2Active" data-shift-index="1" data-shift-field="active" type="checkbox" checked />
+                    <span>Shift 2</span>
+                  </label>
+                  <div class="time-pair">
+                    <input id="shift2Start" data-shift-index="1" data-shift-field="start" type="time" value="14:00" />
+                    <input id="shift2End" data-shift-index="1" data-shift-field="end" type="time" value="22:00" />
+                  </div>
                 </div>
-              </div>
-              <div class="control shift-control">
-                <label for="shift3Start">Shift 3</label>
-                <div class="time-pair">
-                  <input id="shift3Start" data-shift-index="2" data-shift-field="start" type="time" value="22:00" />
-                  <input id="shift3End" data-shift-index="2" data-shift-field="end" type="time" value="06:00" />
+                <div class="control shift-control">
+                  <label class="shift-toggle" for="shift3Active">
+                    <input id="shift3Active" data-shift-index="2" data-shift-field="active" type="checkbox" checked />
+                    <span>Shift 3</span>
+                  </label>
+                  <div class="time-pair">
+                    <input id="shift3Start" data-shift-index="2" data-shift-field="start" type="time" value="22:00" />
+                    <input id="shift3End" data-shift-index="2" data-shift-field="end" type="time" value="06:00" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -386,6 +397,6 @@
         </section>
       </section>
     </main>
-    <script src="./app.js?v=assembly-shift-capacity-v1"></script>
+    <script src="./app.js?v=assembly-shift-toggle-v1"></script>
   </body>
 </html>
