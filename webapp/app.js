@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "assembly-shift-running-balance-v1";
+const DATA_VERSION = "assembly-shift-even-build-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -901,84 +901,52 @@ function calculateCapacityProjection() {
 
   const buckets = buildHourlyBuckets(operationalWindow);
   const consumptionByHour = new Map();
-  const buildDemandByHour = new Map();
   demandEvents.forEach((event) => {
     const consumptionBucket = hourBucket(event.time);
     if (consumptionBucket >= operationalWindow.start && consumptionBucket < operationalWindow.end) {
       const consumptionKey = consumptionBucket.toISOString();
       consumptionByHour.set(consumptionKey, (consumptionByHour.get(consumptionKey) || 0) + event.carts);
     }
-
-    // Build demand is created ahead of consumption by the selected hold time.
-    // Shift validation/reassignment below decides whether that build can happen in its scheduled hour.
-    const buildBucket = hourBucket(addHours(event.time, -state.holdTimeHours));
-    const buildKey = buildBucket.toISOString();
-    buildDemandByHour.set(buildKey, (buildDemandByHour.get(buildKey) || 0) + event.carts);
   });
 
   const projectionRows = buckets.map((bucket) => ({
     time: bucket,
     assemblyActive: isAssemblyActive(bucket, assemblyShifts) ? 1 : 0,
     originalDemand: consumptionByHour.get(bucket.toISOString()) || 0,
-    scheduledBuild: buildDemandByHour.get(bucket.toISOString()) || 0,
-    shiftedIn: 0,
-    shiftedOut: 0,
-    shiftedTo: null,
     adjustedBuild: 0,
     shiftInventory: 0,
     inventory: 0,
     squareFeet: 0,
   }));
 
-  let priorActiveIndex = -1;
-  let startingShiftInventory = 0;
-  const hasActiveHour = projectionRows.some((row) => row.assemblyActive);
-  projectionRows.forEach((row, index) => {
-    const buildDemand = row.scheduledBuild;
-    if (row.assemblyActive) {
-      priorActiveIndex = index;
-      return;
-    }
-    if (buildDemand <= 0) return;
-    if (priorActiveIndex < 0) {
-      if (!hasActiveHour) {
-        throw new Error(`Unresolved offshift demand at ${formatHourWithMinutes(row.time)}: no active assembly shift hour exists in the selected 24-hour cycle.`);
-      }
-      startingShiftInventory += buildDemand;
-      row.shiftedOut = buildDemand;
-      row.shiftedTo = "prior active shift";
-      return;
-    }
-    projectionRows[priorActiveIndex].shiftedIn += buildDemand;
-    row.shiftedOut = buildDemand;
-    row.shiftedTo = projectionRows[priorActiveIndex].time;
-  });
-
-  buildDemandByHour.forEach((buildDemand, key) => {
-    const buildTime = new Date(key);
-    if (buildTime >= operationalWindow.start && buildTime < operationalWindow.end) return;
-    if (buildDemand <= 0) return;
-    if (buildTime < operationalWindow.start) {
-      startingShiftInventory += buildDemand;
-      return;
-    }
-    const finalActiveIndex = findFinalActiveIndex(projectionRows);
-    if (finalActiveIndex < 0) {
-      throw new Error(`Unresolved offshift demand after ${formatHourWithMinutes(operationalWindow.end)}: no prior active assembly shift hour exists in the selected 24-hour cycle.`);
-    }
-    projectionRows[finalActiveIndex].shiftedIn += buildDemand;
-  });
-
-  let inventory = startingShiftInventory;
+  const activeRows = projectionRows.filter((row) => row.assemblyActive);
+  if (!activeRows.length && demandEvents.length) {
+    throw new Error("No active assembly shift hours are available to cover final hold demand.");
+  }
+  const totalBuildDemand = demandEvents.reduce((sum, event) => sum + event.carts, 0);
+  const evenBuildRate = activeRows.length ? totalBuildDemand / activeRows.length : 0;
   projectionRows.forEach((row) => {
-    row.adjustedBuild = row.assemblyActive ? row.scheduledBuild + row.shiftedIn : 0;
-    const inventoryBeforeDemand = inventory + row.adjustedBuild;
-    inventory = inventoryBeforeDemand - row.originalDemand;
-    row.shiftInventory = inventoryBeforeDemand;
-    // Final hold capacity follows the physical build/consume balance:
-    // active assembly hours can add carts, offshift hours can only draw inventory down.
-    row.inventory = row.shiftInventory;
-    row.squareFeet = row.inventory * 3;
+    row.adjustedBuild = row.assemblyActive ? evenBuildRate : 0;
+  });
+
+  // Assume production is paced evenly across all active assembly hours.
+  // Starting inventory represents carts built before this 24-hour view so early offshift demand is still covered.
+  let runningInventory = 0;
+  let minimumInventory = 0;
+  projectionRows.forEach((row) => {
+    runningInventory += row.adjustedBuild;
+    row.shiftInventory = runningInventory;
+    runningInventory -= row.originalDemand;
+    minimumInventory = Math.min(minimumInventory, runningInventory);
+  });
+
+  let inventory = Math.abs(minimumInventory);
+  projectionRows.forEach((row) => {
+    inventory += row.adjustedBuild;
+    row.shiftInventory = inventory;
+    row.inventory = inventory;
+    row.squareFeet = Math.ceil(row.inventory) * 3;
+    inventory -= row.originalDemand;
   });
 
   const peakRow = projectionRows.reduce((peak, row) => (row.inventory > peak.inventory ? row : peak), {
@@ -1010,13 +978,6 @@ function getCapacityDemandEnd(window, shifts) {
     if (isAssemblyActive(candidate, shifts)) return candidate;
   }
   return window.end;
-}
-
-function findFinalActiveIndex(rows) {
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
-    if (rows[index].assemblyActive) return index;
-  }
-  return -1;
 }
 
 function validateAssemblyShifts() {
@@ -1298,7 +1259,7 @@ function renderCapacity() {
     const result = calculateCapacityProjection();
     els.capacityError.classList.add("hidden");
     els.capacityError.textContent = "";
-    els.capacityWindowCarts.textContent = formatNumber(result.peakRow.carts);
+    els.capacityWindowCarts.textContent = formatCapacityCarts(result.peakRow.carts);
     els.capacityWindowSqFt.textContent = formatNumber(result.peakRow.squareFeet);
     els.capacityPeakSqFt.textContent = formatNumber(result.peakRow.squareFeet);
     renderCapacityTable(result.rows);
@@ -1459,19 +1420,17 @@ function renderCapacityTable(rows) {
       <td>${formatHourWithMinutes(row.time)}</td>
       <td>${row.assemblyActive}</td>
       <td>${formatNumber(row.originalDemand)}</td>
-      <td>${formatShiftedDemand(row)}</td>
-      <td>${formatNumber(row.adjustedBuild)}</td>
-      <td>${formatNumber(row.inventory)}</td>
+      <td>${formatBuildPacing(row)}</td>
+      <td>${formatBuildRate(row.adjustedBuild)}</td>
+      <td>${formatCapacityCarts(row.inventory)}</td>
       <td>${formatNumber(row.squareFeet)}</td>
     </tr>`)
     .join("");
 }
 
-function formatShiftedDemand(row) {
-  if (row.shiftedIn > 0) return `+${formatNumber(row.shiftedIn)} from offshift`;
-  if (row.shiftedOut > 0 && row.shiftedTo instanceof Date) return `${formatNumber(row.shiftedOut)} to ${formatShortHour(row.shiftedTo)}`;
-  if (row.shiftedOut > 0 && row.shiftedTo) return `${formatNumber(row.shiftedOut)} to ${escapeHtml(row.shiftedTo)}`;
-  return "-";
+function formatBuildPacing(row) {
+  if (row.assemblyActive) return "Even active-hour rate";
+  return "Offshift - no build";
 }
 
 function renderGaps(missing) {
@@ -1949,6 +1908,14 @@ function csvValue(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(value || 0));
+}
+
+function formatCapacityCarts(value) {
+  return formatNumber(Math.ceil(Number(value || 0)));
+}
+
+function formatBuildRate(value) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(Number(value || 0));
 }
 
 function formatTime(date) {
