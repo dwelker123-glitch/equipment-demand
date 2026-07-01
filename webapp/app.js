@@ -9,7 +9,7 @@ const EQUIPMENT = [
 
 const DEFAULT_SCHEDULE_PATH = "./data/UA June 2026 Turns Mainline.xlsx";
 const DEFAULT_SOURCE_NAME = "UA June 2026 Turns Mainline";
-const DATA_VERSION = "assembly-shift-toggle-v1";
+const DATA_VERSION = "assembly-shift-dropdown-v1";
 const REFERENCE_STORAGE_KEY = "equipmentDemandPlanner.referenceRows.v5";
 const CYCLE_COUNT_STORAGE_KEY = "equipmentDemandPlanner.cycleCounts.v1";
 const VIEW_MODE_STORAGE_KEY = "equipmentDemandPlanner.viewMode.v1";
@@ -154,6 +154,7 @@ async function boot() {
   state.schedule = normalizeSchedule(scheduleRows);
   state.cycleCounts = loadCycleCounts();
   state.viewMode = localStorage.getItem(VIEW_MODE_STORAGE_KEY) || "desktop";
+  populateShiftTimeOptions();
   bindEvents();
   applyViewMode();
   populateEquipmentFilter();
@@ -408,6 +409,19 @@ function bindEvents() {
     drawCurve(calculate().hourlyRows, els.curveCanvas);
     drawCurve(calculate({ scenario: state.irrop }).hourlyRows, els.irropCanvas);
     drawCurrentCapacityChart();
+  });
+}
+
+function populateShiftTimeOptions() {
+  const options = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += 30) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const value = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+    options.push(`<option value="${value}">${value}</option>`);
+  }
+  document.querySelectorAll("[data-shift-time]").forEach((select) => {
+    select.innerHTML = options.join("");
   });
 }
 
